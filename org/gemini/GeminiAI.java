@@ -1,4 +1,5 @@
-/*   This file is part of GeminiAI.
+/**
+ *   This file is part of GeminiAI.
  *   GeminiAI is free software: you can redistribute it and/or modify
  *   it under the terms of the GNU General Public License as published by
  *   the Free Software Foundation, either version 3 of the License, or
@@ -10,10 +11,10 @@
  *   GNU General Public License for more details.
  *
  *   You should have received a copy of the GNU General Public License
- *   along with Gemini.  If not, see <http://www.gnu.org/licenses/>.
+ *   along with GeminiAI.  If not, see <http://www.gnu.org/licenses/>.
  *
- *   Author: Stimim
- *   Email : death1048576@gmail.com
+ *   @author stimim
+ *   email:  death1048576@gmail.com
  */
 package org.gemini;
 
@@ -254,114 +255,6 @@ public class GeminiAI implements AI_Interface {
 		return result;
 	}
 
-	public Section computeProb(Section section) {
-		NumberedSquare[] array = new NumberedSquare[section.size()];
-		
-		int i = 0;
-		
-		for (NumberedSquare v : section) {
-			array[i] = v;
-			i++;
-		}
-		
-		int totalCount = 0;
-		
-		Set<UnknownSquare> set = new HashSet<UnknownSquare>();
-		
-		for (i = 0; i < array.length; i++)
-			set.addAll(array[i].neighbors);
-
-		for (i = 0; 0 <= i && i <= array.length;) {
-			if (i == array.length) {
-				i--;
-				totalCount++;
-				AssumptionRecord record = new AssumptionRecord() ;
-				for (UnknownSquare v : set) {
-					switch (v.assumed) {
-					default:
-						break;
-					case 1:
-						record.add(v.x + ":" + v.y + ":1") ;
-						v.isMineCount++;
-						break;
-					case 2:
-						record.add(v.x + ":" + v.y + ":0") ;
-						break;
-					}
-				}
-				section.recordSet.add(record) ;
-			} else {
-				if (array[i].makeAssumption()) {
-					// make an assumption successfully
-					i++;
-				} else {
-					// fail to make an assumption
-					i--;
-				}
-			}
-		}
-
-		for (UnknownSquare v : set) {
-			double p = v.isMineChance = (double) v.isMineCount / totalCount;
-			
-			RecordSet[] subSet = new RecordSet[2] ;
-			subSet[0] = section.recordSet.onCondiction(v.x , v.y , false) ;
-			subSet[1] = section.recordSet.onCondiction(v.x , v.y , true ) ;
-			
-			int[] eValue = { 0, 0 };
-			int[] total = { 0, 0 };
-			int[] max = {0,0} ;
-			
-			Map<String, Integer>[] mapping = (Map<String, Integer>[]) (new Map[2]);
-
-			mapping[0] = new HashMap<String, Integer>();
-			mapping[1] = new HashMap<String, Integer>() ;
-			
-			for( i = 0 ; i < 2 ; i ++ ) {
-				if (subSet[i].records != null) {
-					for (AssumptionRecord record : subSet[i].records) {
-						if (record.squares != null) {
-							total[i]++;
-							for (String str : record.squares) {
-								if (str.endsWith(":1")) {
-									String t = str.substring( 0 , str.lastIndexOf(':') ) ;
-									int count = 1;
-									if (mapping[i].containsKey(t)) {
-										count += mapping[i].get(t);
-									}
-									mapping[i].put(t, count);
-								}
-							}
-						}
-					}
-				}
-			}
-			
-			for( i = 0 ; i < 2 ; i ++ ) {
-				for( String key : mapping[i].keySet() ) {
-					int value = mapping[i].get(key) ;
-					if( value == total[i] ) {
-						eValue[i] += total[i] ;
-					}
-					else if( max[i] < value )
-						max[i] = value ;
-				}
-				eValue[i] += max[i] ;
-			}
-			//System.out.printf("(%2d,%2d) : %.2f   %d / %d   %d / %d\n", v.x , v.y , p , eValue[1] , total[1] , eValue[0] , total[0]) ;
-			v.expectValue = 0.0 ;
-			if( total[1] != 0 )
-				v.expectValue = p * (double) eValue[1] / total[1];
-			if( total[0] != 0 )
-				v.expectValue -= (1 - p) * (double) eValue[0] / total[0];
-			
-			for( i = 0 ; i < 2 ; i ++ )
-				mapping[i].clear() ;
-		}
-		
-		return section ;
-	}
-
 	public void computeExpectValue() {
 		double expectValue = 0.0;
 		if (sections != null && !sections.isEmpty()) {
@@ -402,27 +295,16 @@ public class GeminiAI implements AI_Interface {
 	}
 	@Override
 	public void guess(GameInfo info, int[] xy) {
-		
-		//System.out.println("AI2") ;
 		initial(info);
-
-		// showMap();
-
 		prepare();
-
-		// showMap();
-
 		Square v = null ;
-
 		if (MineSquare.FoundMine != null) {
 			xy[0] = MineSquare.FoundMine.x;
 			xy[1] = MineSquare.FoundMine.y;
 			MineSquare.FoundMine = null;
 		} else {
 			separateMap();
-
 			computeExpectValue();
-			
 			if ((v = computeScore()) != null) {
 				xy[0] = v.x;
 				xy[1] = v.y;

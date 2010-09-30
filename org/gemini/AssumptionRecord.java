@@ -1,4 +1,5 @@
-/*   This file is part of GeminiAI.
+/**
+ *   This file is part of GeminiAI.
  *   GeminiAI is free software: you can redistribute it and/or modify
  *   it under the terms of the GNU General Public License as published by
  *   the Free Software Foundation, either version 3 of the License, or
@@ -10,10 +11,10 @@
  *   GNU General Public License for more details.
  *
  *   You should have received a copy of the GNU General Public License
- *   along with Gemini.  If not, see <http://www.gnu.org/licenses/>.
+ *   along with GeminiAI.  If not, see <http://www.gnu.org/licenses/>.
  *
- *   Author: Stimim
- *   Email : death1048576@gmail.com
+ *   @author stimim
+ *   email:  death1048576@gmail.com
  */
 package org.gemini;
 
@@ -24,15 +25,21 @@ public class AssumptionRecord {
 	// Each square : "x:y:0" => (x,y) is not mine
 	//               "x:y:1" => (x,y) is mine
 	public Set<String> squares ;
+	public int totalMine ;
 	
 	public AssumptionRecord() {
 		this.squares = null ;
+		this.totalMine = 0 ;
 	}
 	
-	public void add( String v ) {
+	public void add( int x , int y , boolean isMine ) {
 		if( this.squares == null )
 			this.squares = new HashSet<String>() ;
-		this.squares.add(v) ;
+		if( isMine )
+			this.squares.add(x+":"+y+":1") ;
+		else
+			this.squares.add(x+":"+y+":0") ;
+		if( isMine ) this.totalMine ++ ;
 	}
 	
 	public boolean contains( int x , int y , boolean isMine ) {
@@ -42,11 +49,5 @@ public class AssumptionRecord {
 			return this.squares.contains(x+":"+y+":1") ;
 		else
 			return this.squares.contains(x+":"+y+":0") ;
-	}
-	
-	public boolean contains( String v ) {
-		if( this.squares == null )
-			return false ;
-		return this.squares.contains(v) ;
 	}
 }
