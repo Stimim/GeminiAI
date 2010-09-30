@@ -43,21 +43,14 @@ public class GeminiAI implements AI_Interface {
 				case -1: // UNKNOWN
 					map[i][j] = new UnknownSquare(i, j);
 					break;
-				case 1:
-				case 2:
-				case 3:
-				case 4:
-				case 5:
-				case 6:
-				case 7:
-				case 8:
+				case 1: case 2: case 3: case 4:
+				case 5: case 6: case 7: case 8:
 					map[i][j] = new NumberedSquare(i, j, value);
 					break;
 				case 0:
 					map[i][j] = new ZeroSquare(i, j);
 					break;
-				case 9:
-				case -9:
+				case 9: case -9:
 					map[i][j] = new MineSquare(i, j, value / 9);
 					break;
 				}
@@ -108,22 +101,6 @@ public class GeminiAI implements AI_Interface {
 			}
 		}
 	}
-
-	/*
-	 * private void showMap() {
-	 * 
-	 * // This function is used to debug
-	 * 
-	 * for (int j = 0; j < gameInfo.getHeight(); j++) { for (int i = 0; i <
-	 * gameInfo.getWidth(); i++) { if (map[i][j] instanceof NumberedSquare) { //
-	 * NumberedSquare v = (NumberedSquare) map[i][j]; System.out.print('K') ; }
-	 * else if (map[i][j] instanceof UnknownSquare) { int p = (int)
-	 * (((UnknownSquare) map[i][j]).isMineChance * 10); if( p == 10 )
-	 * System.out.print('M') ; else System.out.print(p); } else if (map[i][j]
-	 * instanceof MineSquare) { System.out.print('M'); } else if (map[i][j]
-	 * instanceof ZeroSquare) { System.out.print(' '); } System.out.print(' ');
-	 * } System.out.println(""); } System.out.println(); }
-	 */
 
 	private void destroy() {
 		for (int i = 0; i < gameInfo.getWidth(); i++)
@@ -295,7 +272,6 @@ public class GeminiAI implements AI_Interface {
 						break;
 					}
 				}
-				// TODO: Add record to a record list
 				section.recordSet.add(record) ;
 			} else {
 				if (array[i].makeAssumption()) {
