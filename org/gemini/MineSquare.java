@@ -10,7 +10,7 @@
  *   GNU General Public License for more details.
  *
  *   You should have received a copy of the GNU General Public License
- *   along with Gemini.  If not, see <http://www.gnu.org/licenses/>.
+ *   along with GeminiAI.  If not, see <http://www.gnu.org/licenses/>.
  *
  *   Author: Stimim
  *   Email : death1048576@gmail.com
