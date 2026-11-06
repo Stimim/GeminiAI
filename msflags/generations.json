@@ -1,0 +1,16 @@
+{
+  "r64x4": {
+    "shape": {"channels": 64, "blocks": 4, "policy_beta": 3.0, "planes": 20, "policy_gamma": 3.0, "bomb_threshold": 3.0},
+    "generations": [
+      {"checkpoint": "checkpoints/bootstrap-medium/bootstrap-1793983777620140569.pt", "training": {"bootstrap": 8000, "selfplay": 0}},
+      {"checkpoint": "checkpoints/run-medium/selfplay-1793985122701818335.pt", "training": {"bootstrap": 8000, "selfplay": 3}}
+    ]
+  },
+  "r32x3": {
+    "shape": {"channels": 32, "blocks": 3, "policy_beta": 3.0, "planes": 20, "policy_gamma": 3.0, "bomb_threshold": 3.0},
+    "generations": [
+      {"checkpoint": "checkpoints/bootstrap-small/bootstrap-1793983891981972304.pt", "training": {"bootstrap": 8000, "selfplay": 0}},
+      {"checkpoint": "checkpoints/run-small/selfplay-1793985169316701862.pt", "training": {"bootstrap": 8000, "selfplay": 3}}
+    ]
+  }
+}

@@ -6,9 +6,10 @@ let agentList = [];
 let activeAgentId = '';
 
 function navigateAgent(direction) {
-  const available = agentList.filter(agent => agent.available);
+  const available = agentList;
   if (!available.length) return;
-  const current = available.findIndex(agent => agent.id === activeAgentId);
+  const currentCategory = AgentCatalog.categoryFor(agentList, activeAgentId)?.id;
+  const current = available.findIndex(agent => agent.id === currentCategory);
   const index = current < 0 ? 0 : (current + direction + available.length) % available.length;
   location.hash = encodeURIComponent(available[index].id);
 }
@@ -16,12 +17,10 @@ function navigateAgent(direction) {
 function renderSwitcher(currentId) {
   const root = byId('agent-switcher');
   const strip = element('nav', 'agent-switcher-strip');
-  strip.setAttribute('aria-label', 'Switch agent');
-  const available = agentList.filter(agent => agent.available);
+  strip.setAttribute('aria-label', 'Switch AI category');
   agentList.forEach(agent => {
-    const chip = element(agent.available ? 'a' : 'span', `agent-chip${agent.available ? '' : ' is-disabled'}${agent.id === currentId ? ' is-current' : ''}`);
-    if (agent.available) chip.href = `#${encodeURIComponent(agent.id)}`;
-    else { chip.setAttribute('aria-disabled', 'true'); chip.title = 'Unavailable'; }
+    const chip = element('a', `agent-chip${agent.id === currentId ? ' is-current' : ''}`);
+    chip.href = `#${encodeURIComponent(agent.id)}`;
     if (agent.id === currentId) chip.setAttribute('aria-current', 'page');
     chip.append(element('span', 'agent-chip-name', agent.name), element('span', 'badge', agent.kind));
     strip.append(chip);
@@ -105,6 +104,41 @@ function showError(message) {
   byId('catalog-error').hidden = !message;
 }
 
+function generationsSection(category) {
+  const section = element('section', 'detail-section');
+  section.append(element('h3', '', 'Immutable generations'), element('p', 'muted small', 'Latest selects the newest available generation. Each numbered generation preserves its own checkpoint and training history.'));
+  const scroll = element('div', 'table-scroll');
+  const table = element('table');
+  table.append(element('caption', 'sr-only', `${category.name} generations`));
+  const head = element('thead'), labels = element('tr');
+  for (const label of ['Generation', 'Training summary', 'Elo ± 95% CI', 'Games', 'Links']) {
+    const cell = element('th', '', label); cell.scope = 'col'; labels.append(cell);
+  }
+  head.append(labels);
+  const body = element('tbody');
+  for (const generation of AgentCatalog.generations(category)) {
+    const row = element('tr');
+    const title = element('td');
+    title.append(element('strong', '', generation.label || `Generation ${generation.generation}`));
+    if (generation.id === category.default_generation) title.append(element('span', 'badge anchor-badge', 'Latest'));
+    if (!generation.available) title.append(element('span', 'badge unavailable', 'Unavailable'));
+    const links = element('td', 'generation-links');
+    const detail = element('a', 'text-link', 'Details');
+    detail.href = `#${encodeURIComponent(generation.id)}`;
+    links.append(detail);
+    if (generation.available) {
+      const arena = element('a', 'text-link', 'Arena');
+      arena.href = `/arena.html?a=${encodeURIComponent(generation.id)}`;
+      links.append(arena);
+    }
+    row.append(title, element('td', '', AgentCatalog.training(generation.training)), element('td', 'rating-value', AgentCatalog.elo(generation)), element('td', 'numeric', generation.games ?? 0), links);
+    body.append(row);
+  }
+  table.append(head, body); scroll.append(table); section.append(scroll);
+  if (!category.generations.length) section.append(element('p', 'muted', 'No generations have been published.'));
+  return section;
+}
+
 async function showDetail() {
   const request = ++detailRequest;
   const raw = location.hash.slice(1);
@@ -118,7 +152,7 @@ async function showDetail() {
   try { id = decodeURIComponent(raw); } catch { id = raw; }
   if (activeAgentId && activeAgentId !== id) window.scrollTo({top: 0, behavior: 'instant'});
   activeAgentId = id;
-  renderSwitcher(id);
+  renderSwitcher(AgentCatalog.categoryFor(agentList, id)?.id || id);
   content.replaceChildren(element('h2', '', 'Loading agent…'));
   try {
     const agent = await api(`/api/agents/${encodeURIComponent(id)}`);
@@ -131,7 +165,23 @@ async function showDetail() {
     const explanation = element('section', 'detail-section');
     explanation.append(element('h3', '', 'How it works'), element('div', 'explanation', agent.explanation || 'No explanation provided.'));
     const architecture = ['net', 'mcts'].includes(agent.kind) ? architectureSection(agent) : structuredSection('Architecture / shape', agent.shape);
-    content.replaceChildren(heading, element('p', 'lede', agent.summary), architecture, explanation, structuredSection('Provenance', agent.provenance), structuredSection('Settings', agent.settings));
+    const category = agentList.find(item => item.id === id);
+    content.replaceChildren(heading, element('p', 'lede', agent.summary), architecture, explanation, structuredSection('Settings', agent.settings));
+    if (category) {
+      content.append(generationsSection({...category, ...agent, generations: agent.generations || category.generations}));
+    } else {
+      if (!category) {
+        const parent = AgentCatalog.categoryFor(agentList, id);
+        if (parent) {
+          const back = element('a', 'back-link', `← ${parent.name} · all generations`);
+          back.href = `#${encodeURIComponent(parent.id)}`;
+          content.prepend(back);
+        }
+        content.append(structuredSection('Training summary', agent.training));
+        content.append(element('p', 'muted', `${AgentCatalog.elo(agent)} Elo · ${agent.games ?? 0} arena games`));
+      }
+      content.append(structuredSection('Provenance', agent.provenance));
+    }
     if (agent.checkpoint) content.append(structuredSection('Checkpoint', agent.checkpoint));
     if (agent.available) {
       const link = element('a', 'button', 'Compare in the arena →');
@@ -154,7 +204,7 @@ async function loadCatalog() {
     const agents = Array.isArray(data) ? data : data.agents;
     if (!Array.isArray(agents)) throw new Error('The server did not return an agent list.');
     agentList = agents;
-    byId('agent-count').textContent = `${agents.length} agent${agents.length === 1 ? '' : 's'}`;
+    byId('agent-count').textContent = `${agents.length} categories`;
     byId('catalog-status').textContent = agents.length ? '' : 'No agents are registered yet.';
     const cards = agents.map(agent => {
       const card = element('article', 'surface agent-card');
@@ -164,10 +214,10 @@ async function loadCatalog() {
       const link = element('a', '', agent.name);
       link.href = `#${encodeURIComponent(agent.id)}`;
       heading.append(link);
-      const more = element('a', 'text-link', 'Explore agent →');
+      const more = element('a', 'text-link', 'Explore category →');
       more.href = link.href;
       more.setAttribute('aria-label', `Explore ${agent.name}`);
-      card.append(badges, heading, element('p', '', agent.summary), more);
+      card.append(badges, heading, element('p', '', agent.summary), element('p', 'small', AgentCatalog.neural(agent) ? `${agent.generations.length} generation${agent.generations.length === 1 ? '' : 's'} · ${agent.default_generation ? 'Latest available' : 'No checkpoint available'}` : 'Fixed baseline · no training'), more);
       return card;
     });
     byId('agent-grid').replaceChildren(...cards);

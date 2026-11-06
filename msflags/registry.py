@@ -1,4 +1,11 @@
-"""Stable arena identities and lazy shared checkpoint evaluators."""
+"""Six categories backed by immutable, shared architecture generation pins.
+
+generations.json retains checkpoint-derived training counts even without weights.
+Each generation is one JSON line; never repoint an existing record. Bootstrap,
+every tenth completed self-play iteration, and the newest completed timestamped
+checkpoint are initially pinned. ``python -m msflags.registry promote PATH``
+validates and appends a pin; ``python -m msflags.registry list`` lists the catalog.
+"""
 from __future__ import annotations
 
 import json
@@ -24,13 +31,29 @@ def configure(device='cpu'):
         _device = device
 
 
-# Never repoint an existing variant: add a new immutable checkpoint/search pair.
-VARIANTS = [
-    ('checkpoints/bootstrap-medium/bootstrap-1793983777620140569.pt', None),
-    ('checkpoints/bootstrap-small/bootstrap-1793983891981972304.pt', None),
-    ('checkpoints/bootstrap-medium/bootstrap-1793983777620140569.pt', dict(sims=100, c_puct=1.5, fpu_reduction=0.2)),
+GENERATIONS_PATH = Path(__file__).with_name('generations.json')
+_SEARCH = dict(sims=100, c_puct=1.5, fpu_reduction=0.2)
+CATEGORIES = [
+    dict(id='r64x4.greedy', name='ResNet 64×4 · Greedy policy', kind='net', architecture='r64x4', settings={},
+         summary='Solver-distilled policy, without tree search.'),
+    dict(id='r64x4.mcts100-c1.5', name='ResNet 64×4 · MCTS-100 (c 1.5)', kind='mcts', architecture='r64x4', settings=_SEARCH,
+         summary='Information-set search with 100 simulations and exploration c 1.5.'),
+    dict(id='r32x3.greedy', name='ResNet 32×3 · Greedy policy', kind='net', architecture='r32x3', settings={},
+         summary='Solver-distilled policy, without tree search.'),
+    dict(id='r32x3.mcts100-c1.5', name='ResNet 32×3 · MCTS-100 (c 1.5)', kind='mcts', architecture='r32x3', settings=_SEARCH,
+         summary='Information-set search with 100 simulations and exploration c 1.5.'),
+    dict(id='random', name='Random', kind='random', settings={},
+         summary='Uniformly chooses a legal action.',
+         explanation='Chooses uniformly among legal open and bomb actions. It never reads clues or scores. This is a deliberately weak baseline, not the rating anchor.'),
+    dict(id='solver', name='Greedy exact solver', kind='solver', settings={},
+         summary='Claims certain mines, otherwise maximizes immediate expected gain.',
+         explanation='Builds constraints from visible clues and the remaining mine count. Opens certain mines first, otherwise uses the highest expected-mine 5×5 window when worth at least three mines; ties are random. Tractable frontiers are enumerated exactly; difficult components use bounded sampling. Its Elo is fixed at 1000.'),
 ]
 _identities: dict[tuple[str, int], tuple[dict, dict]] = {}
+
+
+def _generations():
+    return json.loads(GENERATIONS_PATH.read_text())
 
 
 def training_counts(path, checkpoint):
@@ -61,15 +84,16 @@ def training_counts(path, checkpoint):
     return bootstrap, selfplay
 
 
-def _neural_entry(checkpoint, search):
+def _neural_entry(checkpoint, search, *, shape=None, training=None):
     path = Path(checkpoint)
-    key = (str(path.resolve()), path.stat().st_mtime_ns)
-    with _lock:
-        if key not in _identities:
-            ck = torch.load(path, map_location='cpu', weights_only=False)
-            training = dict(zip(('bootstrap', 'selfplay'), training_counts(path, ck)))
-            _identities[key] = (ck['net_cfg'], training)
-        shape, training = _identities[key]
+    if shape is None or training is None:
+        key = (str(path.resolve()), path.stat().st_mtime_ns)
+        with _lock:
+            if key not in _identities:
+                ck = torch.load(path, map_location='cpu', weights_only=False)
+                counts = dict(zip(('bootstrap', 'selfplay'), training_counts(path, ck)))
+                _identities[key] = (ck['net_cfg'], counts)
+            shape, training = _identities[key]
     bootstrap = format(training['bootstrap'] / 1000, 'g') + 'k'
     arch = f"r{shape['channels']}x{shape['blocks']}"
     trained = f'bs{bootstrap}'
@@ -78,7 +102,7 @@ def _neural_entry(checkpoint, search):
         trained += f"-sp{training['selfplay']}"
         description += f" + {training['selfplay']} self-play"
     settings = dict(search or {})
-    request_sims = settings.pop('request_sims', False)
+    request_sims = settings.pop('request_sims', search is not None)
     if search is None:
         suffix, label, kind = 'greedy', 'Greedy policy', 'net'
         summary = 'Solver-distilled policy, without tree search.'
@@ -95,39 +119,91 @@ def _neural_entry(checkpoint, search):
         summary = f'Information-set search with {sims} simulations and exploration c {c:g}.'
         if request_sims:
             summary += " Play’s sims box overrides the simulation count."
-    return dict(id=f'{arch}-{trained}.{suffix}',
+    return dict(id=f'{arch}-{trained}.{suffix}', category_id=f'{arch}.{suffix}',
+                generation=training['selfplay'], label=f"Generation {training['selfplay']}" + (' · Bootstrap' if not training['selfplay'] else ''),
+                training=dict(training), shape={k: v for k, v in shape.items() if k != 'rules'},
                 name=f"ResNet {shape['channels']}×{shape['blocks']} · {description} · {label}",
                 kind=kind, checkpoint=str(path), settings=settings,
-                request_sims=request_sims, summary=summary)
+                available=path.is_file(), request_sims=request_sims, summary=summary)
 
 
-def _entries():
-    entries = [
-        dict(id='random', name='Random', kind='random', summary='Uniformly chooses a legal action.', explanation='Chooses uniformly among legal open and bomb actions. It never reads clues or scores. This is a deliberately weak baseline, not the rating anchor.'),
-        dict(id='solver', name='Greedy exact solver', kind='solver', summary='Claims certain mines, otherwise maximizes immediate expected gain.', explanation='Builds constraints from visible clues and the remaining mine count. Opens certain mines first, otherwise uses the highest expected-mine 5×5 window when worth at least three mines; ties are random. Tractable frontiers are enumerated exactly; difficult components use bounded sampling. Its Elo is fixed at 1000.'),
-    ]
-    entries.extend(_neural_entry(checkpoint, search) for checkpoint, search in VARIANTS)
-    ids = [entry['id'] for entry in entries]
+def entries():
+    """Flat concrete identities; missing files never erase pinned generations."""
+    data = _generations()
+    result = []
+    paths = set()
+    for architecture, spec in data.items():
+        shape = spec['shape']
+        if architecture != f"r{shape['channels']}x{shape['blocks']}":
+            raise ValueError(f'Architecture mismatch: {architecture}')
+        for record in spec['generations']:
+            path = str(Path(record['checkpoint']).resolve())
+            if path in paths:
+                raise ValueError('Duplicate checkpoint path in registry')
+            paths.add(path)
+    for category in CATEGORIES:
+        architecture = category.get('architecture')
+        if architecture is None:
+            result.append({**category, 'category_id': category['id'], 'generation': 0,
+                           'label': category['name'], 'available': True,
+                           'training': dict(bootstrap=0, selfplay=0)})
+            continue
+        spec = data[architecture]
+        for record in sorted(spec['generations'], key=lambda r: (r['training']['selfplay'], r['training']['bootstrap'])):
+            result.append(_neural_entry(record['checkpoint'], category['settings'] if category['kind'] == 'mcts' else None,
+                                        shape=record.get('shape', spec['shape']), training=record['training']))
+    ids = [entry['id'] for entry in result]
     if len(ids) != len(set(ids)):
         raise ValueError('Duplicate derived agent id in registry')
-    return entries
-
-
-def _entry(agent_id):
-    for entry in _entries():
-        if entry['id'] == agent_id:
-            return entry
-    raise ValueError(f'unknown agent: {agent_id}')
-
-
-def available(agent_id):
-    e = _entry(agent_id)
-    return 'checkpoint' not in e or Path(e['checkpoint']).is_file()
+    return result
 
 
 def catalog():
-    return [{**e, 'available': 'checkpoint' not in e or Path(e['checkpoint']).is_file()}
-            for e in _entries()]
+    concrete = entries()
+    result = []
+    for category in CATEGORIES:
+        generations = [e for e in concrete if e['category_id'] == category['id']]
+        installed = [e for e in generations if e['available']]
+        default = installed[-1] if installed else None
+        summary = category.get('summary') or ('Solver-distilled policy, without tree search.' if category['kind'] == 'net'
+                  else 'Information-set search with 100 simulations and exploration c 1.5.')
+        result.append({**category, 'summary': summary, 'available': bool(installed),
+                       'request_sims': category['kind'] == 'mcts',
+                       'default_generation': default['id'] if default else None,
+                       'generations': generations})
+    return result
+
+
+def resolve(agent_id):
+    for category in catalog():
+        if category['id'] == agent_id:
+            if category['default_generation'] is None:
+                raise ValueError(f'unavailable agent: {agent_id}')
+            return category['default_generation']
+        for generation in category['generations']:
+            if generation['id'] == agent_id:
+                return agent_id
+    raise ValueError(f'unknown agent: {agent_id}')
+
+
+def _entry(agent_id):
+    resolved = resolve(agent_id)
+    return next(entry for entry in entries() if entry['id'] == resolved)
+
+
+def available(agent_id):
+    for category in catalog():
+        if category['id'] == agent_id:
+            return category['available']
+        for generation in category['generations']:
+            if generation['id'] == agent_id:
+                return generation['available']
+    raise ValueError(f'unknown agent: {agent_id}')
+
+
+def pinned_checkpoints() -> set[str]:
+    """Paths protected from retention, including pins not installed locally."""
+    return {record['checkpoint'] for spec in _generations().values() for record in spec['generations']}
 
 
 def _provenance(path, checkpoint):
@@ -161,13 +237,28 @@ def _provenance(path, checkpoint):
 
 
 def detail(agent_id):
+    category = next((entry for entry in catalog() if entry['id'] == agent_id), None)
+    if category is not None:
+        selected = category['default_generation']
+        if selected is None and category['generations']:
+            selected = category['generations'][-1]['id']
+        if selected is not None and selected != agent_id:
+            return {**_generation_detail(selected), **category}
+        if selected is None:
+            return {**category, 'shape': None, 'provenance': {'training': []},
+                    'explanation': 'No checkpoint is installed for this category.'}
+        return {**_generation_detail(agent_id), **category}
+    return _generation_detail(agent_id)
+
+
+def _generation_detail(agent_id):
     entry = _entry(agent_id)
     result = {**entry, 'available': available(agent_id), 'settings': entry.get('settings', {})}
     if 'checkpoint' not in entry:
         return {**result, 'shape': None, 'provenance': {'training': []}}
     path = Path(entry['checkpoint'])
     if not path.is_file():
-        return {**result, 'shape': None, 'provenance': {}, 'explanation': 'This checkpoint is not installed.'}
+        return {**result, 'provenance': {}, 'explanation': 'This checkpoint is not installed.'}
     key = (str(path.resolve()), path.stat().st_mtime_ns)
     with _lock:
         if key not in _metadata:
@@ -197,7 +288,7 @@ def detail(agent_id):
     return result
 
 
-def create(agent_id, sims=100, rng=None):
+def create(agent_id, sims=None, rng=None):
     entry = _entry(agent_id)
     rng = rng if rng is not None else np.random.default_rng()
     if entry['kind'] == 'random': return RandomAgent(rng)
@@ -211,5 +302,65 @@ def create(agent_id, sims=100, rng=None):
         evaluator = _evaluators[key]
     if entry['kind'] == 'net': return NetAgent(evaluator)
     settings = dict(entry['settings'])
-    if entry.get('request_sims'): settings['sims'] = sims
+    if sims is not None: settings['sims'] = sims
     return MCTSAgent(evaluator, rng=rng, **settings)
+
+
+def promote(checkpoint):
+    """Pin one load-compatible checkpoint; existing identities are immutable."""
+    path = Path(checkpoint)
+    if path.name == 'latest.pt' or path.resolve().name == 'latest.pt':
+        raise ValueError('latest.pt is mutable; promote a timestamped checkpoint')
+    data = _generations()
+    if str(path.resolve()) in {str(Path(p).resolve()) for p in pinned_checkpoints()}:
+        raise ValueError('Duplicate checkpoint path in registry')
+    # Use the real loader: inspecting net_cfg alone misses incompatible weights.
+    _, ck = load(str(path), 'cpu')
+    shape = {key: value for key, value in ck['net_cfg'].items() if key != 'rules'}
+    architecture = f"r{shape['channels']}x{shape['blocks']}"
+    if architecture not in data:
+        raise ValueError(f'Unsupported architecture: {architecture}')
+    training = dict(zip(('bootstrap', 'selfplay'), training_counts(path, ck)))
+    if any(record['training'] == training for record in data[architecture]['generations']):
+        raise ValueError('Duplicate derived agent id in registry')
+    record = dict(checkpoint=str(path), training=training)
+    if shape != data[architecture]['shape']:
+        record['shape'] = shape
+    data[architecture]['generations'].append(record)
+    # Keep every pin on one line: promotion is a single append-only data record.
+    lines = ['{']
+    for index, (arch, spec) in enumerate(data.items()):
+        lines.extend([f'  {json.dumps(arch)}: {{',
+                      f'    "shape": {json.dumps(spec["shape"])},',
+                      '    "generations": ['])
+        records = spec['generations']
+        lines.extend('      ' + json.dumps(item) + (',' if i < len(records) - 1 else '')
+                     for i, item in enumerate(records))
+        lines.extend(['    ]', '  }' + (',' if index < len(data) - 1 else '')])
+    lines.append('}')
+    GENERATIONS_PATH.write_text('\n'.join(lines) + '\n')
+    return [_neural_entry(path, search, shape=shape, training=training)
+            for search in (None, _SEARCH)]
+
+
+def main(argv=None):
+    import argparse
+
+    parser = argparse.ArgumentParser(description='List immutable agent generations or promote a checkpoint.')
+    commands = parser.add_subparsers(dest='command', required=True)
+    commands.add_parser('list', help='List categories and every pinned generation.')
+    promotion = commands.add_parser('promote', help='Append an immutable checkpoint to its architecture.')
+    promotion.add_argument('checkpoint')
+    args = parser.parse_args(argv)
+    if args.command == 'list':
+        print(json.dumps(catalog(), indent=2))
+    else:
+        try:
+            promoted = promote(args.checkpoint)
+        except (ValueError, OSError, RuntimeError, KeyError, TypeError) as exc:
+            parser.error(str(exc))
+        print(json.dumps(promoted, indent=2))
+
+
+if __name__ == '__main__':
+    main()

@@ -7,6 +7,7 @@
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath fill='%2324569c' d='M7 3h3v26H7zM10 4h16l-5 7 5 7H10z'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="/static/style.css">
   <link rel="stylesheet" href="/static/arena.css">
+  <script src="/static/catalog.js" defer></script>
   <script src="/static/archviz.js" defer></script>
   <script src="/static/agents.js" defer></script>
 </head>
@@ -16,8 +17,8 @@
   <main id="content" class="workspace">
     <div class="page-heading"><div><p class="eyebrow">The lineup</p><h1>Meet the AIs</h1><p class="lede">Different ways to read the board. Explore each agent’s strategy, architecture, and training history.</p></div><a class="button secondary" href="/arena.html">Compare in the arena <span aria-hidden="true">→</span></a></div>
     <div id="catalog-error" class="notice error" role="alert" hidden></div>
-    <section id="catalog" aria-labelledby="catalog-title"><div class="section-heading"><h2 id="catalog-title">Agent catalog</h2><span id="agent-count" class="muted"></span></div><p id="catalog-status" role="status">Loading agents…</p><div id="agent-grid" class="agent-grid"></div></section>
-    <section id="agent-detail" class="surface detail" aria-labelledby="detail-title" hidden tabindex="-1"><a href="#" class="back-link">← All agents</a><div id="agent-switcher" class="agent-switcher"></div><div id="detail-content"></div></section>
+    <section id="catalog" aria-labelledby="catalog-title"><div class="section-heading"><h2 id="catalog-title">AI categories</h2><span id="agent-count" class="muted"></span></div><p id="catalog-status" role="status">Loading categories…</p><div id="agent-grid" class="agent-grid"></div></section>
+    <section id="agent-detail" class="surface detail" aria-labelledby="detail-title" hidden tabindex="-1"><a href="#" class="back-link">← All categories</a><div id="agent-switcher" class="agent-switcher"></div><div id="detail-content"></div></section>
     <noscript><p class="notice">Enable JavaScript to load the AI catalog and agent explanations.</p></noscript>
   </main>
   <footer class="site-footer">Minesweeper Flags <span aria-hidden="true">·</span> Claim mines. Keep the turn. Win the majority.</footer>

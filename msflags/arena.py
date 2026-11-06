@@ -120,9 +120,9 @@ class ArenaManager:
     def start(self, a: str, b: str, games: int, seed: int = 42) -> dict:
         if isinstance(games, bool) or not isinstance(games, int) or not 1 <= games <= 1000:
             raise ValueError("games must be an integer from 1 to 1000")
-        known = {entry["id"] for entry in registry.catalog()}
-        if a == b or a not in known or b not in known:
-            raise ValueError("choose two distinct known agents")
+        a, b = registry.resolve(a), registry.resolve(b)
+        if a == b:
+            raise ValueError("choose two distinct agents")
         if not registry.available(a) or not registry.available(b):
             raise ValueError("both agents must be available")
         if isinstance(seed, bool) or not isinstance(seed, int) or seed < 0:
@@ -162,7 +162,13 @@ class ArenaManager:
         with self._lock:
             # Read afresh so offline CLI results appear without a server restart.
             records = self._records()
-        return fit_ratings(records, registry.catalog())
+        entries = registry.entries()
+        result = fit_ratings(records, entries)
+        metadata = {entry["id"]: entry for entry in entries}
+        for row in result["ratings"]:
+            entry = metadata.get(row["id"], {})
+            row.update({key: entry[key] for key in ("category_id", "generation") if key in entry})
+        return result
 
     def _snapshot(self, match: dict, game: Game, seats: list[str], moves: int,
                   last_move: dict | None) -> None:
@@ -211,7 +217,7 @@ class ArenaManager:
                     seed = match["seed"] + index
                     streams = np.random.SeedSequence(seed).spawn(3)
                     game = Game.random(cfg, np.random.default_rng(streams[0]))
-                    agents = [registry.create(agent_id, sims=100, rng=np.random.default_rng(streams[i + 1]))
+                    agents = [registry.create(agent_id, rng=np.random.default_rng(streams[i + 1]))
                               for i, agent_id in enumerate(seats)]
                     active.append(dict(index=index, seed=seed, seats=seats, game=game, agents=agents, moves=0, started=time.perf_counter()))
                     with self._lock:
@@ -277,14 +283,17 @@ def main() -> None:
     torch.set_num_threads(4)
     registry.configure(device=getattr(args, "device", "cpu"))
     if args.command == "roundrobin":
-        agents = args.agents or [entry["id"] for entry in registry.catalog() if entry["available"]]
+        agents = args.agents or [entry["default_generation"] for entry in registry.catalog() if entry["available"]]
         if len(agents) < 2 or len(set(agents)) != len(agents):
             parser.error("choose at least two distinct agents")
         if not 1 <= args.games <= 1000 or args.seed < 0:
             parser.error("games must be 1..1000 and seed must be nonnegative")
-        known = {entry["id"] for entry in registry.catalog()}
-        if any(agent_id not in known or not registry.available(agent_id) for agent_id in agents):
-            parser.error("all agents must be known and available")
+        try:
+            agents = [registry.resolve(agent_id) for agent_id in agents]
+            if len(set(agents)) != len(agents) or any(not registry.available(agent_id) for agent_id in agents):
+                raise ValueError("all agents must be distinct and available")
+        except ValueError as exc:
+            parser.error(str(exc))
         manager.batch_size = 32
         for index, (a, b) in enumerate(itertools.combinations(agents, 2)):
             match = manager.start(a, b, args.games, seed=args.seed + index * args.games)

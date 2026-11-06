@@ -53,7 +53,8 @@ def configure(requested_device: str) -> None:
 
 
 def agent_names() -> list[str]:
-    return [entry["id"] for entry in registry.catalog() if entry["available"]]
+    return [entry["id"] for entry in registry.entries() if entry["available"]] + [
+        entry["id"] for entry in registry.catalog() if entry["available"]]
 
 
 def make_agent(name: str, sims: int, rng: np.random.Generator):
@@ -79,13 +80,29 @@ def get_session(game_id: str) -> Session:
 def index(): return FileResponse(WEB / "index.html")
 
 @app.get("/api/agents")
-def agents(): return {"agents": registry.catalog()}
+def agents():
+    rows = {row["id"]: row for row in manager.ratings()["ratings"]}
+    return {"agents": [with_ratings(category, rows) for category in registry.catalog()]}
+
+
+def with_ratings(entry: dict, rows: dict) -> dict:
+    result = dict(entry)
+    if "generations" in result:
+        result["generations"] = [with_ratings(generation, rows) for generation in result["generations"]]
+    row = rows.get(result["id"], {})
+    result["games"] = row.get("games", 0)
+    if result["games"]:
+        result.update(elo=row["rating"], uncertainty=row["uncertainty"])
+    return result
 
 
 @app.get("/api/agents/{agent_id}")
 def agent_detail(agent_id: str):
-    try: return registry.detail(agent_id)
-    except ValueError as exc: raise HTTPException(404, str(exc)) from exc
+    try:
+        rows = {row["id"]: row for row in manager.ratings()["ratings"]}
+        return with_ratings(registry.detail(agent_id), rows)
+    except ValueError as exc:
+        raise HTTPException(404, str(exc)) from exc
 
 
 @app.get("/agents.html")
@@ -123,16 +140,20 @@ def ratings(): return manager.ratings()
 @app.post("/api/games")
 def new_game(body: NewGame):
     if len(body.players) != 2 or body.sims < 1: raise HTTPException(400, "players must contain two seats and sims must be positive")
-    available = agent_names()
-    if any(p != "human" and p not in available for p in body.players): raise HTTPException(400, "unknown or unavailable player")
+    try:
+        players = ["human" if player == "human" else registry.resolve(player) for player in body.players]
+        if any(player != "human" and not registry.available(player) for player in players):
+            raise ValueError("unknown or unavailable player")
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
     rng = np.random.default_rng(body.seed)
     game = Game.random(Config(), rng)
     try:
-        ags = [None if p == "human" else make_agent(p, body.sims, rng) for p in body.players]
+        ags = [None if p == "human" else make_agent(p, body.sims, rng) for p in players]
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
     gid = uuid.uuid4().hex
-    s = Session(game, body.players, body.sims, ags)
+    s = Session(game, players, body.sims, ags)
     with sessions_lock: sessions[gid] = s
     result = serialize(s); result["id"] = gid
     return result
@@ -176,12 +197,13 @@ def ai_move(game_id: str):
         return serialize(s)
 
 @app.get("/api/games/{game_id}/hint")
-def hint(game_id: str, agent: str = "solver"):
+def hint(game_id: str, agent: str = "solver", sims: int | None = None):
     s = get_session(game_id)
+    if sims is not None and sims < 1: raise HTTPException(400, "sims must be positive")
     with s.lock:
         if agent not in agent_names(): raise HTTPException(400, "hint agent unavailable")
         try:
-            return make_agent(agent, s.sims, np.random.default_rng()).info(s.game.public())
+            return make_agent(agent, s.sims if sims is None else sims, np.random.default_rng()).info(s.game.public())
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc
 

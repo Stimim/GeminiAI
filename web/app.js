@@ -54,11 +54,17 @@ async function api(path, body) {
 }
 
 function agentName(id) {
-  return id === 'human' ? 'Human' : catalog.find(agent => agent.id === id)?.name || id;
+  if (id === 'human') return 'Human';
+  for (const category of catalog) {
+    if (category.id === id) return category.name;
+    const entry = category.generations.find(item => item.id === id);
+    if (entry) return entry.name;
+  }
+  return id;
 }
 
 function updateAbout(seat) {
-  const id = $(`p${seat}`).value;
+  const id = selectedAgent(`p${seat}`);
   $(`p${seat}About`).href = id === 'human' ? '/agents.html' : `/agents.html#${encodeURIComponent(id)}`;
   $(`p${seat}About`).title = id === 'human' ? 'Read about the available AI opponents.' : `Read about ${agentName(id)}.`;
 }
@@ -168,7 +174,7 @@ async function refreshHints(token) {
   if (!$('hintOn').checked || !game || game.winner !== null) return;
   $('hintStatus').textContent = 'Calculating hints…';
   try {
-    const result = await api(`/api/games/${gameId}/hint?agent=${encodeURIComponent($('hintAgent').value)}`);
+    const result = await api(`/api/games/${gameId}/hint?agent=${encodeURIComponent(selectedAgent('hintAgent'))}&sims=${encodeURIComponent($('sims').value)}`);
     if (token !== generation || request !== hintRequest) return;
     hints = result;
     render();
@@ -221,13 +227,12 @@ async function newGame(event) {
   hovered = null;
   try {
     const result = await api('/api/games', {
-      players: [$('p0').value, $('p1').value], sims: Number($('sims').value),
+      players: [selectedAgent('p0'), selectedAgent('p1')], ...(!$('sims').disabled ? {sims: Number($('sims').value)} : {}),
       seed: $('seed').value === '' ? null : Number($('seed').value)
     });
     if (token !== generation) return;
     gameId = result.id;
     game = result;
-    filterAgents();
     busy = false;
     render();
     await refreshHints(token);
@@ -284,8 +289,11 @@ canvas.addEventListener('click', event => {
   } else if (game.board[cell] === -1) makeMove('move', {cell, bomb: false});
 });
 $('newGameForm').addEventListener('submit', newGame);
-$('hintOn').addEventListener('change', () => refreshHints(generation));
-$('hintAgent').addEventListener('change', () => refreshHints(generation));
+for (const id of ['hintOn', 'hintAgentGeneration']) $(id).addEventListener('change', () => {
+  updateSims();
+  refreshHints(generation);
+});
+$('sims').addEventListener('change', () => refreshHints(generation));
 $('showPolicy').addEventListener('change', render);
 $('policyKind').addEventListener('change', render);
 $('bomb').addEventListener('click', () => { if (canBomb()) { bombArmed = !bombArmed; render(); } });
@@ -297,30 +305,57 @@ document.addEventListener('keydown', event => {
   }
 });
 
+function selectedAgent(id) {
+  return AgentCatalog.selected($(id), $(`${id}Generation`), catalog);
+}
+
+function updateSims() {
+  const ids = ['p0', 'p1', ...($('hintOn').checked ? ['hintAgent'] : [])];
+  const enabled = ids.some(id => catalog.find(category => category.id === $(id).value)?.kind === 'mcts');
+  $('sims').disabled = !enabled;
+  $('simsLabel').title = enabled ? 'Simulation budget per MCTS move or hint; does not affect greedy networks or baselines.' : 'Only applies to MCTS. Select an MCTS player or enable MCTS hints to change this budget.';
+  $('sims').title = $('simsLabel').title;
+}
+
+function updateGenerationPicker(id) {
+  const category = catalog.find(item => item.id === $(id).value);
+  AgentCatalog.fillGenerations($(`${id}Generation`), category);
+  $(`${id}Generation`).closest('.generation-picker').hidden = !AgentCatalog.neural(category);
+}
+
 function filterAgents(initial = false) {
-  const available = catalog;
   for (const id of ['p0', 'p1', 'hintAgent']) {
-    const select = $(id), previous = select.value;
+    const select = $(id);
     select.replaceChildren();
     if (id !== 'hintAgent') select.add(new Option('Human', 'human'));
-    for (const agent of available) {
-      const option = new Option(agent.name, agent.id);
-      option.title = agent.summary;
+    for (const category of catalog) {
+      const option = new Option(category.name, category.id);
+      option.title = category.summary;
+      option.disabled = !category.available;
       select.add(option);
     }
-    if ([...select.options].some(option => option.value === previous)) select.value = previous;
   }
-  if (initial) $('p1').value = available.find(agent => agent.request_sims)?.id || available.find(agent => agent.id === 'solver')?.id || 'human';
-  if (initial || !$('hintAgent').value) $('hintAgent').value = available.find(agent => agent.id === 'solver')?.id || available[0]?.id || '';
-  $('hintOn').disabled = available.length === 0;
+  if (initial) $('p1').value = catalog.find(category => category.available && category.kind === 'mcts')?.id || catalog.find(category => category.available)?.id || 'human';
+  $('hintAgent').value = catalog.find(category => category.id === 'solver' && category.available)?.id || catalog.find(category => category.available)?.id || '';
+  $('hintOn').disabled = !catalog.some(category => category.available);
+  ['p0', 'p1', 'hintAgent'].forEach(updateGenerationPicker);
   [0, 1].forEach(updateAbout);
+  updateSims();
 }
-[0, 1].forEach(seat => $(`p${seat}`).addEventListener('change', () => updateAbout(seat)));
+for (const id of ['p0', 'p1', 'hintAgent']) {
+  $(id).addEventListener('change', () => {
+    updateGenerationPicker(id);
+    updateSims();
+    if (id === 'hintAgent') refreshHints(generation);
+    else updateAbout(Number(id.slice(1)));
+  });
+}
+[0, 1].forEach(seat => $(`p${seat}Generation`).addEventListener('change', () => updateAbout(seat)));
 
 async function initialize() {
   try {
     const result = await api('/api/agents');
-    catalog = result.agents.filter(agent => agent.available !== false);
+    catalog = result.agents;
     filterAgents(true);
     await newGame();
   } catch (error) { $('error').textContent = error.message; }

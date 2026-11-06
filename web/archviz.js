@@ -6,6 +6,7 @@ function architectureSection(agent) {
   section.append(element('h3', '', 'Network architecture'));
   if (!agent.shape || !agent.board || !agent.input_planes) {
     section.append(element('p', 'muted', 'Architecture unavailable: this checkpoint is not installed.'));
+    if (agent.kind === 'mcts') section.append(searchSection(agent));
     return section;
   }
   const {channels: c, blocks: n, policy_beta: initialBeta} = agent.shape;
@@ -123,9 +124,9 @@ function searchSection(agent) {
   section.append(flow);
   section.append(element('p', 'arch-caption', 'Repeat simulations from public information, never the real hidden mine layout. Terminal states back up the actual outcome; other leaves use the net’s value. Backups preserve the value perspective when a mine keeps the turn and switch perspective when the player changes.'));
   const glossary = element('dl', 'search-glossary');
-  const settings = agent.settings;
+  const settings = agent.settings || {};
   const entries = [
-    [`sims · ${settings.sims}`, 'Simulation budget per move. The initial root network evaluation also counts as one simulation in this implementation. Play can override this budget for the legacy mcts agent.'],
+    [`sims · ${settings.sims ?? 'not provided'}`, 'Simulation budget per move. The initial root network evaluation also counts as one simulation. Play can override this budget for an MCTS category; greedy networks and baselines ignore it.'],
     [`c_puct · ${settings.c_puct}`, 'Exploration constant: weights policy prior and uncertainty against observed value. The code selects the largest score = Q + c_puct · P · √(N_parent + 1) / (1 + N_child), where N_parent is the sum of child visits.'],
     [`FPU reduction · ${settings.fpu_reduction}`, 'First-play urgency: unvisited moves use Q = parent network value − reduction, instead of a child’s observed mean value. This lowers their starting Q, favouring moves with supporting evidence while the prior-based exploration term still encourages exploration.'],
   ];

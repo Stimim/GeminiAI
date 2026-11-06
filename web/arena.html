@@ -7,6 +7,7 @@
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath fill='%2324569c' d='M7 3h3v26H7zM10 4h16l-5 7 5 7H10z'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="/static/style.css">
   <link rel="stylesheet" href="/static/arena.css">
+  <script src="/static/catalog.js" defer></script>
   <script src="/static/arena.js" defer></script>
 </head>
 <body>
@@ -17,9 +18,9 @@
     <section class="surface match-setup" aria-labelledby="setup-title">
       <div class="section-heading"><h2 id="setup-title">Set up a match</h2><span class="muted">AI vs. AI</span></div>
       <form id="match-form" class="match-form">
-        <label for="agent-a">Contender A<select id="agent-a" required disabled><option value="">Loading agents…</option></select></label>
+        <div class="contender"><label for="agent-a">Contender A category<select id="agent-a" required disabled><option value="">Loading categories…</option></select></label><label class="generation-picker" for="agent-a-generation">Generation<select id="agent-a-generation" aria-label="Contender A generation" disabled></select></label></div>
         <span class="versus" aria-hidden="true">vs</span>
-        <label for="agent-b">Contender B<select id="agent-b" required disabled><option value="">Loading agents…</option></select></label>
+        <div class="contender"><label for="agent-b">Contender B category<select id="agent-b" required disabled><option value="">Loading categories…</option></select></label><label class="generation-picker" for="agent-b-generation">Generation<select id="agent-b-generation" aria-label="Contender B generation" disabled></select></label></div>
         <label for="game-count">Games<input id="game-count" type="number" min="1" max="1000" step="1" value="10" required aria-describedby="count-help"></label>
         <button id="start-match" type="submit" disabled>Start match</button>
       </form>

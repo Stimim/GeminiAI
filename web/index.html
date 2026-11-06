@@ -12,9 +12,9 @@
 <main id="content">
   <h1>Minesweeper Flags</h1>
   <form id="newGameForm" class="panel new-game">
-    <div class="seat"><label for="p0">Player 1</label><select id="p0" title="Human: you click. Random: random legal moves. Greedy exact solver: exact mine probabilities. ResNet Greedy policy: network, no search. ResNet MCTS: network + tree search."></select><a id="p0About" class="about" href="/agents.html">about</a></div>
-    <div class="seat"><label for="p1">Player 2</label><select id="p1" title="Human: you click. Random: random legal moves. Greedy exact solver: exact mine probabilities. ResNet Greedy policy: network, no search. ResNet MCTS: network + tree search."></select><a id="p1About" class="about" href="/agents.html">about</a></div>
-    <label title="Number of Monte Carlo tree-search simulations per move or hint. More simulations cost more time.">MCTS sims <input id="sims" type="number" min="1" step="1" value="200" required></label>
+    <div class="seat"><label for="p0">Player 1 category</label><select id="p0"></select><a id="p0About" class="about" href="/agents.html">about</a><label class="generation-picker" for="p0Generation">Generation<select id="p0Generation" aria-label="Player 1 generation"></select></label></div>
+    <div class="seat"><label for="p1">Player 2 category</label><select id="p1"></select><a id="p1About" class="about" href="/agents.html">about</a><label class="generation-picker" for="p1Generation">Generation<select id="p1Generation" aria-label="Player 2 generation"></select></label></div>
+    <label id="simsLabel" title="Select an MCTS category to customize its simulation budget.">MCTS sims <input id="sims" type="number" min="1" step="1" value="100" required disabled></label>
     <label title="Optional integer random seed for a reproducible initial board. Leave blank for a random game.">Seed <input id="seed" type="number" step="1" placeholder="random"></label>
     <button id="new" title="Replace the current game with a new board using the selected players, simulation count, and seed.">New game</button>
   </form>
@@ -35,7 +35,8 @@
     <p class="hint-caption">Overlay an AI's view of the current position</p>
     <div class="hints">
       <label title="Overlay the selected AI's estimated mine probabilities on unknown cells."><input id="hintOn" type="checkbox"> Hint</label>
-      <select id="hintAgent" aria-label="Hint agent" title="Random: random legal moves. Greedy exact solver: exact mine probabilities. ResNet Greedy policy: network, no search. ResNet MCTS: network + tree search."></select>
+      <select id="hintAgent" aria-label="Hint category"></select>
+      <label class="hint-generation generation-picker" for="hintAgentGeneration">Generation<select id="hintAgentGeneration" aria-label="Hint generation"></select></label>
       <label title="Show the AI's move preference: network policy for greedy-policy agents, search visit distribution for MCTS agents."><input id="showPolicy" type="checkbox"> Policy</label>
       <select id="policyKind" aria-label="Policy action type" title="Open shows single-cell move probabilities. Bomb shows probabilities for 5×5 bomb centres, including already-opened centres."><option value="open">Open policy</option><option value="bomb">Bomb policy</option></select>
       <span id="value" title="The AI's estimated outcome for the player to move: -1 is a sure loss, +1 is a sure win. A dash means this agent provides no value estimate.">Value: —</span>
@@ -47,6 +48,7 @@
   </div>
   <div id="error" role="alert"></div>
 </main>
+<script src="/static/catalog.js"></script>
 <script src="/static/app.js"></script>
 </body>
 </html>

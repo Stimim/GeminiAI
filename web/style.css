@@ -108,7 +108,10 @@ canvas { display: block; width: 100%; height: auto; touch-action: manipulation; 
   main { padding: 26px 16px 36px; }
   .hints { gap: 9px; }
   label { font-size: 14px; }
-  select { max-width: 190px; }
+  .new-game select { max-width: none; }
+  .new-game .seat > label:first-child { grid-column: 1; grid-row: 1; }
+  .new-game .seat > .about { grid-column: 2; grid-row: 1; }
+  .new-game .seat > select { grid-column: 1 / -1; font-size: 14px; }
 }
 @media (min-width: 1100px) {
   .play-area { display: grid; grid-template-columns: minmax(0, 640px) minmax(250px, 1fr); align-items: start; gap: 18px; }
@@ -117,3 +120,12 @@ canvas { display: block; width: 100%; height: auto; touch-action: manipulation; 
   .hint-card { max-width: none; }
   .rules { max-width: none; margin: 0; }
 }
+.generation-picker { font-size: 13px; color: #536274; }
+.new-game .generation-picker { grid-column: 1 / -1; }
+.generation-picker select { width: 100%; min-width: 0; max-width: none; }
+.hint-card { height: auto; min-height: 326px; grid-template-rows: 22px 36px auto 40px 36px; }
+.hints { grid-template-rows: none; grid-auto-rows: minmax(32px, auto); }
+.hints > label.hint-generation { grid-column: 1 / -1; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px; }
+.hints > label:has(#showPolicy) { grid-column: 1; }
+#policyKind { grid-column: 2; }
+input:disabled, select:disabled { color: #687586; background: #edf0f4; cursor: not-allowed; }

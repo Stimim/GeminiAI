@@ -129,6 +129,12 @@ def fake_registry(monkeypatch):
         available=lambda agent_id: agent_id in ("random", "solver"),
         create=create,
     )
+    def resolve(agent_id):
+        if not fake.available(agent_id):
+            raise ValueError("unknown or unavailable agent")
+        return agent_id
+    fake.resolve = resolve
+    fake.entries = fake.catalog
     monkeypatch.setattr(arena, "registry", fake)
     return fake
 
@@ -272,6 +278,24 @@ def test_move_snapshots_publish_every_move_under_lock(tmp_path, fake_registry):
         assert snapshot["board"][last["cell"]] != UNKNOWN
         assert last["cell"] in last["opened"]
     assert snapshots[-1] == result["current"]
+
+
+def test_category_selection_persists_concrete_generations(tmp_path, fake_registry):
+    fake_registry.resolve = lambda agent_id: {"category": "random"}.get(agent_id, agent_id)
+    create = fake_registry.create
+    requested = []
+    def fixed_settings(agent_id, **kwargs):
+        requested.append(kwargs)
+        return create(agent_id, **kwargs)
+    fake_registry.create = fixed_settings
+    manager = arena.ArenaManager(tmp_path / "games.jsonl", cfg=Config(2, 3, 3))
+    match = manager.start("category", "solver", 1)
+    finish(manager)
+    assert match["a"] == "random"
+    assert manager.status(match["id"])["results"][0]["seats"] == ["random", "solver"]
+    assert requested and all("sims" not in kwargs for kwargs in requested)
+    with pytest.raises(ValueError, match="distinct"):
+        manager.start("category", "random", 1)
 
 
 @pytest.mark.parametrize("command", ["ratings", "roundrobin"])

@@ -157,3 +157,12 @@ td{padding:14px 10px;border-bottom:1px solid #edf0f5}
 .search-glossary dt{font-weight:700;color:var(--blue);margin-top:18px}
 .search-glossary dd{margin:6px 0 0;line-height:1.75;overflow-wrap:anywhere}
 @media(max-width:650px){.arch-grid{grid-template-columns:1fr;gap:14px}.arch-svg{max-width:400px;margin:auto}.arch-summary{font-size:15px}}
+.contender{display:flex;flex:1 1 220px;min-width:0;flex-direction:column;gap:9px}
+.match-form .contender label{min-width:0;flex:auto}
+.contender select{max-width:none}
+.generation-links{white-space:nowrap}
+.generation-links a+a{margin-left:12px}
+.category-header th{background:#edf3fa;padding-top:16px;font-size:13px;text-transform:none;letter-spacing:0}
+.generation-row td:nth-child(2){padding-left:24px}
+.agent-card,.detail,.detail-section{min-width:0}
+@media(max-width:560px){.contender{flex-basis:100%;width:100%}.match-form .contender label{flex-basis:auto}.detail-heading h2{font-size:25px;overflow-wrap:anywhere}.generation-row td:nth-child(2){padding-left:14px}}

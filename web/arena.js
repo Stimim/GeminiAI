@@ -2,6 +2,7 @@
 
 const $ = id => document.getElementById(id);
 const agents = new Map();
+let categories = [];
 let matchId = null;
 let pollTimer = null;
 let pollGeneration = 0;
@@ -11,18 +12,27 @@ let submitting = false;
 let lastResultCount = -1;
 let ratingsRequest = 0;
 
+function selectedContender(id) {
+  return AgentCatalog.selected($(id), $(`${id}-generation`), categories);
+}
+function updateGenerationPicker(id) {
+  const category = categories.find(item => item.id === $(id).value);
+  AgentCatalog.fillGenerations($(`${id}-generation`), category);
+  $(`${id}-generation`).closest('.generation-picker').hidden = !AgentCatalog.neural(category);
+}
 function filterContenders() {
-  const available = [...agents.values()].filter(agent => agent.available && agent.id !== 'human');
+  const available = categories.filter(category => category.available);
   for (const id of ['agent-a', 'agent-b']) {
-    const previous = $(id).value;
-    $(id).replaceChildren(...available.map(agent => {
-      const option = node('option', '', agent.name); option.value = agent.id; return option;
+    $(id).replaceChildren(...categories.map(category => {
+      const option = node('option', '', category.name);
+      option.value = category.id; option.disabled = !category.available; return option;
     }));
-    if (available.some(agent => agent.id === previous)) $(id).value = previous;
+    $(id).value = available[0]?.id || '';
   }
-  if ($('agent-a').value === $('agent-b').value) $('agent-b').value = available.find(agent => agent.id !== $('agent-a').value)?.id || '';
-  catalogReady = available.length >= 2;
-  errorAt('setup-error', catalogReady ? '' : 'At least two AI agents are required.');
+  $('agent-b').value = available[1]?.id || available[0]?.id || '';
+  ['agent-a', 'agent-b'].forEach(updateGenerationPicker);
+  catalogReady = [...agents.values()].filter(agent => agent.available).length >= 2;
+  errorAt('setup-error', catalogReady ? '' : 'At least two AI generations are required.');
   validateContenders();
   updateControls();
 }
@@ -47,6 +57,7 @@ async function api(path, options = {}) {
 }
 function updateControls() {
   for (const id of ['agent-a', 'agent-b', 'game-count']) $(id).disabled = !catalogReady || activeMatch || submitting;
+  for (const id of ['agent-a', 'agent-b']) $(`${id}-generation`).disabled = !catalogReady || activeMatch || submitting || !AgentCatalog.neural(categories.find(category => category.id === $(id).value));
   $('start-match').disabled = !catalogReady || activeMatch || submitting;
   $('start-match').textContent = submitting ? 'Starting…' : activeMatch ? 'Match running…' : 'Start match';
 }
@@ -55,11 +66,19 @@ async function loadAgents() {
     const data = await api('/api/agents');
     const list = Array.isArray(data) ? data : data.agents;
     if (!Array.isArray(list)) throw new Error('The server did not return an agent list.');
-    list.forEach(agent => agents.set(agent.id, agent));
+    categories = list;
+    list.forEach(category => category.generations.forEach(generation => agents.set(generation.id, generation)));
     filterContenders();
     const requested = new URLSearchParams(location.search).get('a');
-    if ([...$('agent-a').options].some(option => option.value === requested)) $('agent-a').value = requested;
-    if ($('agent-b').value === $('agent-a').value) $('agent-b').value = [...$('agent-b').options].find(option => option.value !== $('agent-a').value)?.value || '';
+    if (requested) AgentCatalog.setSelection($('agent-a'), $('agent-a-generation'), categories, requested);
+    ['agent-a', 'agent-b'].forEach(id => {
+      $(`${id}-generation`).closest('.generation-picker').hidden = !AgentCatalog.neural(categories.find(category => category.id === $(id).value));
+    });
+    if (selectedContender('agent-b') === selectedContender('agent-a')) {
+      const alternative = [...agents.values()].find(agent => agent.available && agent.id !== selectedContender('agent-a'));
+      if (alternative) AgentCatalog.setSelection($('agent-b'), $('agent-b-generation'), categories, alternative.id);
+    }
+    validateContenders();
     if (matchId) resumeMatch(matchId);
   } catch (error) { errorAt('setup-error', `Could not load contenders: ${error.message}`); }
 }
@@ -143,8 +162,9 @@ function renderMatch(match) {
   $('match-section').hidden = false;
   $('match-title').textContent = `${name(match.a)} vs ${name(match.b)}`;
   if (agents.has(match.a) && agents.has(match.b)) {
-    $('agent-a').value = match.a;
-    $('agent-b').value = match.b;
+    AgentCatalog.setSelection($('agent-a'), $('agent-a-generation'), categories, match.a);
+    AgentCatalog.setSelection($('agent-b'), $('agent-b-generation'), categories, match.b);
+    for (const id of ['agent-a', 'agent-b']) $(`${id}-generation`).closest('.generation-picker').hidden = !AgentCatalog.neural(categories.find(category => category.id === $(id).value));
     $('game-count').value = match.games;
   }
   $('match-status').textContent = match.status;
@@ -182,10 +202,13 @@ function resumeMatch(id) {
   pollMatch(++pollGeneration);
 }
 function validateContenders() {
-  $('agent-b').setCustomValidity($('agent-a').value === $('agent-b').value ? 'Choose two different agents.' : '');
+  $('agent-b-generation').setCustomValidity(selectedContender('agent-a') === selectedContender('agent-b') ? 'Choose two different generations.' : '');
+  $('agent-b').setCustomValidity(selectedContender('agent-a') === selectedContender('agent-b') ? 'Choose two different generations.' : '');
 }
-$('agent-a').addEventListener('change', validateContenders);
-$('agent-b').addEventListener('change', validateContenders);
+for (const id of ['agent-a', 'agent-b']) {
+  $(id).addEventListener('change', () => { updateGenerationPicker(id); validateContenders(); updateControls(); });
+  $(`${id}-generation`).addEventListener('change', validateContenders);
+}
 $('match-form').addEventListener('submit', async event => {
   event.preventDefault();
   validateContenders();
@@ -194,7 +217,7 @@ $('match-form').addEventListener('submit', async event => {
   updateControls();
   errorAt('setup-error', '');
   try {
-    const match = await api('/api/arena/matches', {method: 'POST', body: JSON.stringify({a: $('agent-a').value, b: $('agent-b').value, games: Number($('game-count').value)})});
+    const match = await api('/api/arena/matches', {method: 'POST', body: JSON.stringify({a: selectedContender('agent-a'), b: selectedContender('agent-b'), games: Number($('game-count').value)})});
     matchId = match.id;
     lastResultCount = -1;
     history.replaceState(null, '', `${location.pathname}${location.search}#${encodeURIComponent(matchId)}`);
@@ -215,21 +238,36 @@ async function loadRatings() {
   try {
     const data = await api('/api/ratings');
     if (request !== ratingsRequest) return;
-    const sorted = [...data.ratings].sort((a, b) => b.rating - a.rating || a.id.localeCompare(b.id));
-    $('ratings-body').replaceChildren(...sorted.map((rating, index) => {
-      const row = node('tr');
-      const agent = node('td');
-      const link = node('a', 'text-link', rating.name);
-      link.href = `/agents.html#${encodeURIComponent(rating.id)}`;
-      agent.append(link);
-      if (rating.id === data.anchor) agent.append(node('span', 'badge anchor-badge', 'Anchor'));
-      const value = node('td', 'rating-value', `${Math.round(rating.rating)} ± ${Math.round(rating.uncertainty)}`);
-      value.title = `95% interval: ${Math.round(rating.rating - rating.uncertainty)} to ${Math.round(rating.rating + rating.uncertainty)} Elo`;
-      row.append(node('td', 'muted', index + 1), agent, value, node('td', 'numeric', rating.games));
-      return row;
-    }));
-    $('ratings-table').hidden = !sorted.length;
-    $('ratings-status').textContent = sorted.length ? 'Updated from all recorded arena games.' : 'No ratings yet. Run a match to start the leaderboard.';
+    const ratings = new Map(data.ratings.map(rating => [rating.id, rating]));
+    const rows = [];
+    const ranked = data.ratings.filter(rating => rating.games > 0).sort((a, b) => b.rating - a.rating || a.id.localeCompare(b.id));
+    for (const category of categories) {
+      const group = node('tr', 'category-header');
+      const heading = node('th');
+      heading.colSpan = 4; heading.scope = 'rowgroup';
+      const categoryLink = node('a', 'text-link', category.name);
+      categoryLink.href = `/agents.html#${encodeURIComponent(category.id)}`;
+      heading.append(categoryLink); group.append(heading); rows.push(group);
+      for (const generation of AgentCatalog.generations(category)) {
+        const rating = ratings.get(generation.id) || generation;
+        const row = node('tr', 'generation-row');
+        const agent = node('td');
+        const link = node('a', 'text-link', generation.label || generation.name);
+        link.href = `/agents.html#${encodeURIComponent(generation.id)}`;
+        agent.append(link);
+        if (generation.id === data.anchor) agent.append(node('span', 'badge anchor-badge', 'Anchor'));
+        if (AgentCatalog.neural(category) && generation.id === category.default_generation) agent.append(node('span', 'badge anchor-badge', 'Latest'));
+        if (!generation.available) agent.append(node('span', 'badge unavailable', 'Unavailable'));
+        const value = node('td', 'rating-value', AgentCatalog.elo(rating));
+        if (Number.isFinite(rating.rating) && Number.isFinite(rating.uncertainty)) value.title = `95% interval: ${Math.round(rating.rating - rating.uncertainty)} to ${Math.round(rating.rating + rating.uncertainty)} Elo`;
+        const rank = ranked.findIndex(item => item.id === generation.id);
+        row.append(node('td', 'muted', rank < 0 ? '—' : rank + 1), agent, value, node('td', 'numeric', rating.games ?? 0));
+        rows.push(row);
+      }
+    }
+    $('ratings-body').replaceChildren(...rows);
+    $('ratings-table').hidden = !rows.length;
+    $('ratings-status').textContent = rows.length ? 'Grouped by category; newest generations first. Ratings use all recorded arena games.' : 'No generations published yet.';
   } catch (error) {
     if (request !== ratingsRequest) return;
     $('ratings-status').textContent = 'Ratings could not be refreshed. Any ratings shown below are from the previous update.';
@@ -243,8 +281,7 @@ window.addEventListener('hashchange', () => {
     catch { errorAt('setup-error', 'The match link contains an invalid ID.'); }
   }
 });
-loadAgents();
-loadRatings();
+loadAgents().then(loadRatings);
 if (location.hash.length > 1) {
   try { resumeMatch(decodeURIComponent(location.hash.slice(1))); }
   catch { errorAt('setup-error', 'The match link contains an invalid ID.'); }
