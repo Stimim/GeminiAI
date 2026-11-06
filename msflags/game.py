@@ -85,15 +85,15 @@ _NEIGH_CACHE: dict[tuple[int, int], list[np.ndarray]] = {}
 
 
 def neighbour_sum(grid: np.ndarray) -> np.ndarray:
-    """Sum of the 8 neighbours of each cell of a 2-D array (zero padded)."""
-    p = np.pad(grid, 1)
-    h, w = grid.shape
+    """Sum the 8 spatial neighbours, preserving any leading batch axes."""
+    p = np.pad(grid, [(0, 0)] * (grid.ndim - 2) + [(1, 1), (1, 1)])
+    h, w = grid.shape[-2:]
     out = np.zeros_like(grid)
     for dr in (0, 1, 2):
         for dc in (0, 1, 2):
             if dr == 1 and dc == 1:
                 continue
-            out = out + p[dr : dr + h, dc : dc + w]
+            out += p[..., dr : dr + h, dc : dc + w]
     return out
 
 
@@ -290,4 +290,33 @@ def encode(board: np.ndarray, scores: list[int], to_move: int, cfg: Config, bomb
     remaining = bombs if bombs is not None else [cfg.bombs, cfg.bombs]
     x[18] = remaining[to_move]
     x[19] = remaining[1 - to_move]
+    return x
+
+
+def encode_batch(states: list[tuple], cfg: Config) -> np.ndarray:
+    """Encode public states together, with exactly the scalar encoder's planes."""
+    boards, scores, players, bombs = zip(*states)
+    b = np.asarray(boards).reshape(-1, cfg.h, cfg.w)
+    scores = np.asarray(scores)
+    players = np.asarray(players)
+    bombs = np.asarray(bombs)
+    rows = np.arange(len(states))
+    x = np.empty((len(states), NUM_PLANES, cfg.h, cfg.w), dtype=np.float32)
+    unknown = b == UNKNOWN
+    opened = (b >= 0) & (b <= 8)
+    x[:, 0] = unknown
+    x[:, 1] = b == (9 + players[:, None, None])
+    x[:, 2] = b == (10 - players[:, None, None])
+    for k in range(9):
+        x[:, 3 + k] = b == k
+    claimed_nb = neighbour_sum((b >= 9).astype(np.float32))
+    x[:, 12] = np.where(opened, (b - claimed_nb) / 8.0, 0.0)
+    x[:, 13] = neighbour_sum(unknown.astype(np.float32)) / 8.0
+    x[:, 14] = (scores[rows, players] / cfg.win_score)[:, None, None]
+    x[:, 15] = (scores[rows, 1 - players] / cfg.win_score)[:, None, None]
+    remaining = cfg.mines - scores.sum(axis=1)
+    x[:, 16] = (remaining / np.maximum(1, unknown.sum(axis=(1, 2))))[:, None, None]
+    x[:, 17] = 1.0
+    x[:, 18] = bombs[rows, players, None, None]
+    x[:, 19] = bombs[rows, 1 - players, None, None]
     return x

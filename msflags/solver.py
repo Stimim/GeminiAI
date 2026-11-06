@@ -315,6 +315,10 @@ class Analysis:
         for p in reversed(polys):
             suffix.append(np.convolve(suffix[-1], p))
         self._suffix = list(reversed(suffix))  # _suffix[j] = conv(polys[j:])
+        # Conditional distributions depend only on component and prefix mine count.
+        # Cache lazily: most searches visit only a small fraction of possible prefixes.
+        self._sample_choices = {}
+        self._sample_cells = {}
 
     # --------------------------------------------------------------- sampling
     def sample(self, rng: np.random.Generator | None = None) -> np.ndarray:
@@ -326,16 +330,25 @@ class Analysis:
         prefix = 0
         for j, comp in enumerate(self.components):
             rest = self._suffix[j + 1]
-            ks = sorted(comp.stats)
-            w = np.array(
-                [comp.stats[k].count * float(rest @ wC[prefix + k : prefix + k + len(rest)]) for k in ks]
-            )
-            k = ks[int(rng.choice(len(ks), p=w / w.sum()))]
+            choice_key = (j, prefix)
+            choice = self._sample_choices.get(choice_key)
+            if choice is None:
+                ks = sorted(comp.stats)
+                w = np.array(
+                    [comp.stats[k].count * float(rest @ wC[prefix + k : prefix + k + len(rest)]) for k in ks]
+                )
+                choice = self._sample_choices[choice_key] = (ks, w / w.sum())
+            ks, probabilities = choice
+            k = ks[int(rng.choice(len(ks), p=probabilities))]
             res = comp.stats[k].reservoir
-            mask = res[int(rng.integers(len(res)))]
-            for i, c in enumerate(comp.cells):
-                if mask >> i & 1:
-                    mines[c] = True
+            index = int(rng.integers(len(res)))
+            cell_key = (j, k, index)
+            cells = self._sample_cells.get(cell_key)
+            if cells is None:
+                mask = res[index]
+                cells = np.array([c for i, c in enumerate(comp.cells) if mask >> i & 1], dtype=np.intp)
+                self._sample_cells[cell_key] = cells
+            mines[cells] = True
             prefix += k
         need = self.R - prefix
         if need:

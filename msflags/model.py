@@ -22,7 +22,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from .game import NUM_PLANES, Config, encode
+from .game import NUM_PLANES, Config, encode_batch
 
 
 @dataclass
@@ -119,9 +119,7 @@ class Evaluator:
     @torch.inference_mode()
     def __call__(self, states: list[tuple], cfg: Config):
         """Evaluate states containing (board, scores, to_move, bombs)."""
-        encoded = [encode(board, scores, to_move, cfg, bombs)
-                   for board, scores, to_move, bombs in states]
-        x = torch.from_numpy(np.stack(encoded)).to(self.device)
+        x = torch.from_numpy(encode_batch(states, cfg)).to(self.device)
         with torch.autocast(device_type=self.device.type, dtype=torch.bfloat16,
                             enabled=self.device.type == "cuda"):
             logits, value, mine = self.net(x)

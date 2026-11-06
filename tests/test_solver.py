@@ -106,3 +106,16 @@ def test_exact_probabilities_and_samples_after_bomb():
         opened = (pub.board >= 0) & (pub.board <= 8)
         np.testing.assert_array_equal(sampled.counts[opened], pub.board[opened])
         assert np.all(sampled.mines[pub.board >= 9])
+
+
+def test_sampler_cache_preserves_layouts_and_random_stream():
+    game = next(random_positions(Config(5, 5, 6), [3], 5))
+    cached = Analysis(game.public(), rng=np.random.default_rng(10))
+    uncached = Analysis(game.public(), rng=np.random.default_rng(10))
+    left = np.random.default_rng(11)
+    right = np.random.default_rng(11)
+    for _ in range(100):
+        uncached._sample_choices.clear()
+        uncached._sample_cells.clear()
+        np.testing.assert_array_equal(cached.sample(left), uncached.sample(right))
+    assert left.bit_generator.state == right.bit_generator.state

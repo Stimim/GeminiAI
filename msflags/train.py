@@ -5,9 +5,13 @@ import argparse
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
 import json
+import itertools
 import math
 import os
 from pathlib import Path
+import multiprocessing
+import signal
+import warnings
 import time
 
 import numpy as np
@@ -15,7 +19,7 @@ import torch
 import torch.nn.functional as F
 
 from .agents import RandomAgent, SolverAgent
-from .game import Config, Game, UNKNOWN, encode
+from .game import Config, Game, UNKNOWN, encode_batch
 from .mcts import Search
 from .model import Evaluator, Net, NetConfig, load, save
 from .solver import Analysis
@@ -113,8 +117,11 @@ def fit(net, data, args, steps, optimizer=None):
     start = time.monotonic()
     # Compact preencoded CPU storage avoids repeating neighbour computations per epoch.
     availability = data['bombs']
-    x = np.stack([encode(b, s, int(p), cfg, bombs) for b, s, p, bombs in
-                  zip(data['board'], data['scores'], data['player'], availability)]).astype(np.float16)
+    x = np.empty((n, 20, cfg.h, cfg.w), dtype=np.float16)
+    for offset in range(0, n, 1024):
+        part = slice(offset, offset + 1024)
+        states = list(zip(data['board'][part], data['scores'][part], data['player'][part], availability[part]))
+        x[part] = encode_batch(states, cfg)
     net.train()
     total = np.zeros(3)
     for step in range(1, steps + 1):
@@ -244,13 +251,107 @@ def selfplay_batch(args, evaluator, seed):
     return pack(positions, cfg)
 
 
+_worker_evaluator = None
+
+
+def _init_selfplay_worker(net_cfg, device, threads):
+    signal.signal(signal.SIGTERM, signal.SIG_IGN)
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+    global _worker_evaluator
+    torch.set_num_threads(threads)
+    if torch.device(device).type == 'cuda':
+        torch.backends.cudnn.benchmark = True
+    _worker_evaluator = Evaluator(Net(net_cfg), device)
+
+
+def _selfplay_worker(job):
+    args, state, seed = job
+    _worker_evaluator.net.load_state_dict(state)
+    return selfplay_batch(args, _worker_evaluator, seed)
+
+
 def selfplay_games(args, evaluator, seed):
-    batches = []
+    jobs = []
     for offset in range(0, args.games, args.concurrent_games):
         batch_args = argparse.Namespace(**vars(args))
         batch_args.games = min(args.concurrent_games, args.games - offset)
-        batches.append(selfplay_batch(batch_args, evaluator, seed + offset))
+        jobs.append((batch_args, seed + offset))
+    pool = getattr(evaluator, 'selfplay_pool', None)
+    if pool is None:
+        batches = [selfplay_batch(batch_args, evaluator, batch_seed) for batch_args, batch_seed in jobs]
+    else:
+        state = {key: value.detach().cpu() for key, value in evaluator.net.state_dict().items()}
+        batches = list(pool.map(_selfplay_worker, [(batch_args, state, batch_seed) for batch_args, batch_seed in jobs]))
     return {k: np.concatenate([batch[k] for batch in batches]) for k in batches[0]}
+
+
+DISK_LIMIT_BYTES = 100_000_000_000
+
+
+def disk_bytes(root):
+    """Count allocated project file sizes once per inode (latest.pt is a hard link)."""
+    seen = set()
+    total = 0
+    for directory, _, files in os.walk(root):
+        for name in files:
+            path = Path(directory) / name
+            try:
+                stat = path.stat()
+            except FileNotFoundError:
+                continue
+            key = (stat.st_dev, stat.st_ino)
+            if key not in seen:
+                seen.add(key)
+                total += stat.st_size
+    return total
+
+
+def prune_checkpoints(root='checkpoints', dry_run=False, limit=DISK_LIMIT_BYTES):
+    """Only obsolete immutable self-play weights are eligible for deletion."""
+    root = Path(root)
+    before = disk_bytes(root)
+    project_root = Path.cwd() if root.resolve().is_relative_to(Path.cwd()) else root
+    project_usage = disk_bytes(project_root)
+    try:
+        from .registry import pinned_checkpoints
+    except ImportError:
+        warnings.warn('registry.pinned_checkpoints unavailable: retaining every checkpoint', RuntimeWarning)
+        return dict(before_bytes=before, after_bytes=before, project_bytes=project_usage,
+                    deleted=[], over_budget=max(before, project_usage) > limit)
+    pinned = {Path(path).resolve() for path in pinned_checkpoints()}
+    deleted = []
+    for directory, _, files in os.walk(root):
+        directory = Path(directory)
+        candidates = []
+        for name in files:
+            if not (name.startswith('selfplay-') and name.endswith('.pt')):
+                continue
+            path = directory / name
+            try:
+                metadata = torch.load(path, map_location='cpu', weights_only=False)
+                iteration = metadata.get('selfplay_iterations', metadata.get('iteration'))
+                if iteration is not None:
+                    candidates.append((int(iteration), path))
+            except (OSError, RuntimeError, EOFError, ValueError):
+                warnings.warn(f'Cannot inspect {path}; retaining it', RuntimeWarning)
+        newest = set(sorted({iteration for iteration, _ in candidates})[-3:])
+        for iteration, path in candidates:
+            if path.resolve() in pinned or iteration % 10 == 0 or iteration in newest:
+                continue
+            deleted.append(str(path))
+            if not dry_run:
+                path.unlink(missing_ok=True)
+    after = disk_bytes(root)
+    project_usage = disk_bytes(project_root)
+    over_budget = max(after, project_usage) > limit
+    if over_budget:
+        warnings.warn(f'DISK BUDGET EXCEEDED: project={project_usage}, checkpoints={after} bytes > {limit}; training must stop. Milestones and pinned weights retained.', RuntimeWarning)
+    return dict(before_bytes=before, after_bytes=after, project_bytes=project_usage,
+                deleted=deleted, over_budget=over_budget)
+
+
+def prune(args):
+    print(json.dumps(prune_checkpoints(args.root, args.dry_run)), flush=True)
 
 
 def selfplay(args):
@@ -275,13 +376,32 @@ def selfplay(args):
         raise FileNotFoundError(f'checkpoint replay buffer missing: {replay_path}')
     log(args, 'resume', checkpoint=str(source), completed_iterations=previous_iterations,
         replay_positions=0 if replay is None else len(replay['board']))
-    for iteration in range(previous_iterations + 1, args.iterations + 1):
+    initial_retention = prune_checkpoints(args.disk_root)
+    log(args, 'retention', **initial_retention)
+    if initial_retention['over_budget']:
+        return
+    stop_requested = False
+
+    def request_stop(signum, frame):
+        nonlocal stop_requested
+        stop_requested = True
+
+    previous_handlers = {sig: signal.signal(sig, request_stop) for sig in (signal.SIGTERM, signal.SIGINT)}
+    pool = None
+    if args.workers > 1:
+        pool = ProcessPoolExecutor(max_workers=args.workers, mp_context=multiprocessing.get_context('spawn'),
+                                   initializer=_init_selfplay_worker,
+                                   initargs=(net.cfg, args.device, args.worker_threads))
+    evaluator = Evaluator(net, args.device)
+    evaluator.selfplay_pool = pool
+    iterations = range(previous_iterations + 1, args.iterations + 1) if args.iterations else itertools.count(previous_iterations + 1)
+    for iteration in iterations:
         args.iteration = iteration
         started = time.monotonic()
         if torch.device(args.device).type == 'cuda':
             torch.cuda.reset_peak_memory_stats(args.device)
         generation_start = time.monotonic()
-        data = selfplay_games(args, Evaluator(net, args.device), args.seed + iteration)
+        data = selfplay_games(args, evaluator, args.seed + iteration)
         generation_seconds = time.monotonic() - generation_start
         new_positions = len(data['board'])
         replay = {k: data[k][-args.replay_size:].copy() if replay is None else
@@ -308,6 +428,14 @@ def selfplay(args):
             checkpoint=str(saved),
             peak_vram_mb=(torch.cuda.max_memory_allocated(args.device) / 2**20
                           if torch.device(args.device).type == 'cuda' else 0))
+        retention = prune_checkpoints(args.disk_root)
+        log(args, 'retention', **retention)
+        if retention['over_budget'] or stop_requested:
+            break
+    if pool is not None:
+        pool.shutdown()
+    for sig, handler in previous_handlers.items():
+        signal.signal(sig, handler)
 
 
 def wilson(wins, games):
@@ -384,6 +512,9 @@ def arena(args):
 def parser():
     p = argparse.ArgumentParser(description=__doc__)
     subs = p.add_subparsers(dest='command', required=True)
+    pruning = subs.add_parser('prune', help='Retain pinned, milestone, and newest-three self-play checkpoints.')
+    pruning.add_argument('--root', default='checkpoints')
+    pruning.add_argument('--dry-run', action='store_true')
     for name in ('bootstrap', 'selfplay', 'arena'):
         s = subs.add_parser(name)
         s.add_argument('--output', default='checkpoints')
@@ -418,6 +549,9 @@ def parser():
             s.add_argument('--data')
             s.add_argument('--game-log-every', type=int, default=100)
         if name == 'selfplay':
+            s.add_argument('--workers', type=int, default=1, help='Independent spawned self-play processes.')
+            s.add_argument('--worker-threads', type=int, default=1)
+            s.add_argument('--disk-root', default='checkpoints')
             s.add_argument('--replay-size', type=int, default=100000)
             s.add_argument('--dirichlet-alpha', type=float, default=0.15)
             s.add_argument('--dirichlet-frac', type=float, default=0.25)
@@ -427,8 +561,9 @@ def parser():
             s.add_argument('--eval-games', type=int, default=40)
         if name == 'arena':
             from . import registry
-            ids = [entry['id'] for entry in registry.catalog()]
-            default = next((entry['id'] for entry in registry.catalog() if entry.get('request_sims')), 'solver')
+            entries = registry.entries()
+            ids = [entry['id'] for entry in entries] + [entry['id'] for entry in registry.catalog()]
+            default = next((entry['id'] for entry in entries if entry.get('request_sims')), 'solver')
             s.add_argument('--agent-a', choices=ids, default=default,
                            help='Catalog identity; --checkpoint overrides its weights for an unrecorded evaluation.')
             s.add_argument('--agent-b', choices=ids, default='solver')
@@ -439,14 +574,21 @@ def parser():
 def main():
     p = parser()
     args = p.parse_args()
+    if args.command == 'prune':
+        prune(args)
+        return
     if args.size < 2 or args.mines < 1 or args.mines >= args.size**2 or args.mines % 2 == 0:
         p.error('use a square board with a positive odd mine count smaller than its area (no draws)')
     if args.games < 1 or args.sims < 1 or args.concurrent_games < 1:
         p.error('games, sims, and concurrent-games must be positive')
-    if args.command != 'arena' and (args.steps < 1 or args.batch_size < 1 or args.iterations < 1 or args.log_every < 1):
-        p.error('steps, batch-size, iterations, and log-every must be positive')
+    if args.command != 'arena' and (args.steps < 1 or args.batch_size < 1 or args.iterations < 0 or args.log_every < 1):
+        p.error('steps, batch-size, and log-every must be positive; iterations must be nonnegative')
+    if args.command == 'bootstrap' and args.iterations == 0:
+        p.error('bootstrap iterations must be positive')
     if args.command == 'selfplay' and (args.replay_size < 1 or args.eval_every < 0 or args.eval_games < 1):
         p.error('replay-size and eval-games must be positive; eval-every must be nonnegative')
+    if args.command == 'selfplay' and (args.workers < 1 or args.worker_threads < 1):
+        p.error('workers and worker-threads must be positive')
     torch.set_num_threads(args.threads)
     torch.manual_seed(args.seed)
     if torch.cuda.is_available():

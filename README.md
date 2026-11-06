@@ -42,7 +42,7 @@ The shared corpus contains **112,302 exact-labelled positions** (epsilon 0.08, s
 
 Medium MCTS-100 won **131/200 (65.5%, 95% CI 58.7–71.7%)** against solver with the same arena seed, in 412.3 seconds under concurrent load; greedy evaluations each took 9.7 seconds. These evaluations are unrecorded head-to-head tests. The fresh 20-games-per-pair round robin added 200 ledger games in 195.0 seconds. With 21 retained solver/random games, the 221-game leaderboard is medium greedy **1145.4 ±113.2**, small greedy **1054.8 ±109.4**, medium MCTS **1019.3 ±109.3**, solver **1000**, random **6.9 ±607.0** Elo. Small pair counts do not establish a reliable ordering between close agents.
 
-The reset archived **100** retired-agent games and retained **21** solver/random games. Backup: `checkpoints/arena/games-before-reset-1793983677327548715.jsonl`. Bootstrap initialization checkpoints are pinned in `registry.VARIANTS`; self-play checkpoints are not registered.
+The reset archived **100** retired-agent games and retained **21** solver/random games. Backup: `checkpoints/arena/games-before-reset-1793983677327548715.jsonl`. Bootstrap and promoted self-play checkpoints are pinned in `msflags/generations.json`.
 
 ## Web UI
 
@@ -50,7 +50,9 @@ Run the server with `uv run python -m msflags.server` and open http://127.0.0.1:
 
 ### AI catalog and arena
 
-Use **Play** (`/`), **AIs** (`/agents.html`), and **Arena** (`/arena.html`). The catalog explains each strategy and reads network shape and training provenance from real checkpoints and their `metrics.jsonl`. Evaluators are loaded lazily and shared by checkpoint. Neural IDs are derived as `{arch}-{training}.{search}`: `r{channels}x{blocks}`, `bs{bootstrap steps in k}` plus `-sp{completed self-play iterations}` when applicable, and `greedy` or `mcts{sims}-c{c_puct}` (with `-f{fpu}` only for nondefault FPU reduction, default 0.2). Missing training provenance and duplicate derived IDs raise errors rather than guessing. The registered neural entries are `r64x4-bs8k.greedy`, `r32x3-bs8k.greedy`, and `r64x4-bs8k.mcts100-c1.5`. Arena always uses the listed fixed settings.
+The catalog has six categories: Random, Greedy exact solver, and ResNet 64×4 / 32×3 with either Greedy policy or MCTS-100 (c 1.5). Each neural category has immutable checkpoint generations; both search modes of an architecture share its pinned generation list. Generation 0 is bootstrap; generation k is completed self-play iteration k. Category IDs (`r64x4.greedy`, `r64x4.mcts100-c1.5`, `r32x3.greedy`, `r32x3.mcts100-c1.5`) select the latest available generation. Baselines have one generation each. Category detail shows architecture, search settings, training summaries and generation ratings; generation detail retains full checkpoint provenance.
+
+Generation IDs remain `{arch}-{training}.{search}`: for example `r64x4-bs8k-sp12.greedy`. They derive from checkpoint metadata, not filenames or list position. Bootstrap uses `bs{steps in k}`, followed by `-sp{completed iterations}` for self-play. Search is `greedy` or `mcts{sims}-c{c_puct}` (plus `-f{fpu}` for nondefault FPU reduction; default 0.2). Missing provenance and duplicate identities are rejected. Arena records and Elo always belong to concrete generations, never moving categories. Play’s simulation budget applies only to MCTS; arena always uses the category’s fixed settings.
 
 Only 20-plane checkpoints with joint open/bomb policies are supported.
 
@@ -59,7 +61,7 @@ Arena games alternate the starting seat and append to `checkpoints/arena/games.j
 
 #### Round-robin CLI
 
-`--games` is the number of games **per pair**. By default, every available registry entry participates; five agents produce ten pairs, so `--games 20` records 200 games. Use `--agents r64x4-bs8k.greedy solver r64x4-bs8k.mcts100-c1.5` to select contenders, and `--seed 200000` for a reproducible tournament. The `ratings` command refits all persisted results without playing additional games. The training CLI's `arena` command also accepts catalog IDs; `--checkpoint` / `--checkpoint-b` still override the corresponding neural weights for unrecorded evaluations, with `--sims`, `--c-puct`, and `--fpu-reduction` controlling overridden search.
+`--games` is the number of games **per pair**. By default the latest available generation of each category participates; six categories produce fifteen pairs, so `--games 20` records 300 games. Use `--agents r64x4.greedy solver r32x3.mcts100-c1.5` to select categories, or pass immutable generation IDs. `--seed 200000` makes the tournament reproducible. The `ratings` command refits all persisted results without additional games. The training CLI's `arena` command accepts generation IDs; `--checkpoint` / `--checkpoint-b` override the corresponding neural weights for unrecorded evaluations.
 
 ```sh
 uv run python -m msflags.arena roundrobin --games 20 --device cuda
@@ -71,56 +73,90 @@ uv run python -m msflags.arena ratings
 Ratings fit all recorded games jointly with a Bradley–Terry logistic model, fixing the greedy solver at **1000 Elo**. The win probability is `1 / (1 + 10 ** ((rating_b - rating_a) / 400))`. The fit maximizes the likelihood with a Gaussian regularizer centered at 1000, standard deviation **800 Elo**, for every non-anchor agent, keeping perfect win/loss records finite. The leaderboard reports games played and approximate 95% uncertainty half-widths (`1.96 × standard error`) from the inverse fitted Hessian, conditional on the fixed anchor; these are not guarantees of future performance. Random is rated, not used as the anchor.
 
 
-API: `GET /api/agents`, `GET /api/agents/{id}`, `POST /api/arena/matches` (`{a,b,games,seed}`), `GET /api/arena/matches/{id}` (including `current` live board), and `GET /api/ratings`. Unknown/unavailable agents and invalid counts are rejected; a second active match returns HTTP 409. Existing game, move, AI and hint routes accept catalog IDs (plus `human` for game seats).
+API: `GET /api/agents` returns `{agents: [category, …]}`. Each category has `id`, `name`, `kind`, `summary`, `available`, `default_generation` (latest available ID), and `generations`. Generation rows include `id`, `category_id`, `generation`, `label`, `available`, `games`, and, when rated, `elo` and `uncertainty` (95% half-width). `GET /api/agents/{id}` accepts category or generation IDs. Game seats and hints also accept either; game creation resolves categories once and stores concrete generation IDs. `POST /api/arena/matches` (`{a,b,games,seed}`) resolves contenders before recording results. `GET /api/arena/matches/{id}` includes the live public board; `GET /api/ratings` retains per-generation ratings. Unknown/unavailable agents and invalid counts are rejected; a second active match returns HTTP 409.
 
 #### Adding a checkpoint or agent
 
-1. Train to a new timestamped checkpoint, such as `checkpoints/my-run/bootstrap-<timestamp>.pt`; keep the run's `metrics.jsonl` alongside it. Shape comes from `net_cfg`; completed training comes from checkpoint metadata (`bootstrap_steps`, `selfplay_iterations`) or completed metrics, not requested iteration counts.
-2. Add a `(checkpoint, search)` line to `VARIANTS` in `msflags/registry.py`. Use `None` for greedy policy, or search settings for MCTS:
+1. Train to a timestamped checkpoint, keeping its run's `metrics.jsonl` alongside it. Only completed immutable checkpoints are eligible; never promote `latest.pt`.
+2. Run `uv run python -m msflags.registry promote checkpoints/my-run/selfplay-<timestamp>.pt`. This validates the checkpoint and architecture, rejects duplicate paths/identities, and appends it to that architecture's tracked generation list in `msflags/generations.json`. Both search categories acquire the generation together.
+3. Inspect `uv run python -m msflags.registry list`, open `/agents.html`, and rate the generation with `uv run python -m msflags.arena roundrobin --agents <generation-id> solver --games 20 --device cuda`.
 
-   ```python
-   ('checkpoints/my-run/bootstrap-<timestamp>.pt', None),
-   ('checkpoints/my-run/bootstrap-<timestamp>.pt',
-    dict(sims=100, c_puct=1.5, fpu_reduction=0.2)),
-   ```
-
-3. IDs, display names, summaries, and explanations are generated automatically. Restart the server, open `/agents.html`, and run `uv run python -m msflags.arena roundrobin --agents <derived-id> solver --games 20 --device cuda`.
-4. Never repoint an entry to different weights or use `latest.pt` / newest-file globs: persisted results are keyed by derived ID. If a new checkpoint derives an existing ID, do not register it alongside the existing variant or overwrite its weights; use a genuinely distinct architecture/training/search configuration.
+Never overwrite, rename or repoint pinned weights: historical results are keyed by their derived generation IDs. A missing pinned file remains visible as unavailable, and category defaults skip it. `registry.pinned_checkpoints()` exposes all referenced paths so checkpoint pruning preserves promoted weights. New architecture/search categories are explicit definitions in `registry.py`; promotion does not invent categories.
 
 ## Training runs
 
-`checkpoints/run-medium/` and `checkpoints/run-small/` are separate, unregistered self-play runs initialized from their corresponding fresh bootstrap checkpoints. Each iteration uses MCTS-100 (c=1.5), bounded replay (50,000 positions), and saves immutable `selfplay-<timestamp>.pt` weights, optimizer state, and a matching replay snapshot. `latest.pt` is atomically published only after the checkpoint and replay are complete. Two replay slots bound buffer disk use; old timestamped checkpoints remain usable for inference/promotion, but only the latest run checkpoint is guaranteed a matching replay for continuation.
+`checkpoints/run-medium/` (64×4) and `checkpoints/run-small/` (32×3) resume existing optimizer, replay, and iteration counters. The output directory's `latest.pt` always takes precedence over `--checkpoint`. `--iterations 0` is open-ended; positive values are total target iteration numbers, not additional iterations. Interrupted unpublished work is regenerated; the command's learning rate overrides the restored optimizer learning rate.
 
-An existing run's `latest.pt` takes precedence over `--checkpoint`, so repeat the original command to resume safely. `--iterations` is the total target iteration number, not an additional count. Iteration seeds and counters continue after the latest completed checkpoint. Interrupted work since that checkpoint is regenerated. Learning rate is taken from the resume command; optimizer moments are restored.
+### Round 2 launch and operation
 
-Medium launch (PID **1729825**, also recorded in `checkpoints/run-medium/train.pid`):
+Both runs use **96 games / iteration, MCTS-100, c_puct=1.5, unchanged Dirichlet noise, 300 updates × 128 samples**, and 50,000-position replay. Each has two persistent spawned self-play processes, each batching 16 games with one Torch thread; the trainer uses two Torch threads. Equal CPU budgets avoid assigning all 20 hardware threads to either run. Each worker owns its CUDA evaluator; completed games merge in seed/batch order.
 
-```sh
-setsid nohup uv run python -m msflags.train selfplay --output checkpoints/run-medium --checkpoint checkpoints/bootstrap-medium/bootstrap-1793983777620140569.pt --iterations 1000 --games 128 --concurrent-games 32 --sims 100 --steps 400 --batch-size 128 --lr 0.0002 --threads 2 --replay-size 50000 --eval-every 5 --eval-games 100 --seed 610000 --device cuda > checkpoints/run-medium/train.log 2>&1 &
-```
-
-Small launch (PID **1729929**, also recorded in `checkpoints/run-small/train.pid`):
+Medium (detached process group **1734838**, also in `train.pid`):
 
 ```sh
-setsid nohup uv run python -m msflags.train selfplay --output checkpoints/run-small --checkpoint checkpoints/bootstrap-small/bootstrap-1793983891981972304.pt --iterations 1000 --games 128 --concurrent-games 32 --sims 100 --steps 400 --batch-size 128 --lr 0.001 --threads 2 --replay-size 50000 --eval-every 5 --eval-games 100 --seed 620000 --device cuda > checkpoints/run-small/train.log 2>&1 &
+setsid nohup uv run python -m msflags.train selfplay --output checkpoints/run-medium --checkpoint checkpoints/bootstrap-medium/latest.pt --iterations 0 --games 96 --concurrent-games 16 --workers 2 --worker-threads 1 --sims 100 --steps 300 --batch-size 128 --lr 0.0002 --threads 2 --replay-size 50000 --eval-every 5 --eval-games 100 --seed 610000 --device cuda >> checkpoints/run-medium/train.log 2>&1 &
+echo $! > checkpoints/run-medium/train.pid
 ```
 
-Sizing trials (32 games, 100 updates) completed in **100.3 s medium** and **129.8 s small**: 0.330 and 0.253 games/s, with peak allocated VRAM **132.4 MiB** and **71.4 MiB**, respectively. Trials overlapped other arena/training jobs, so these are contention-inclusive measurements, not isolated benchmarks. Their sample reuse was 7.18× / 6.09×; the long runs scale games and updates together by four (128 / 400). Each process uses two Torch threads and 32 concurrent games; both fit comfortably in 8 GB VRAM.
+Small (detached process group **1734839**):
 
-Both detached runs completed iteration 1 and continued training:
+```sh
+setsid nohup uv run python -m msflags.train selfplay --output checkpoints/run-small --checkpoint checkpoints/bootstrap-small/latest.pt --iterations 0 --games 96 --concurrent-games 16 --workers 2 --worker-threads 1 --sims 100 --steps 300 --batch-size 128 --lr 0.001 --threads 2 --replay-size 50000 --eval-every 5 --eval-games 100 --seed 620000 --device cuda >> checkpoints/run-small/train.log 2>&1 &
+echo $! > checkpoints/run-small/train.pid
+```
 
-| Run | Iteration time | Games/s | New/replay positions | Sample reuse | Policy/value/mine loss (last 100 updates) |
-|---|---:|---:|---:|---:|---|
-| medium | 379.0 s | 0.343 | 7,186 | 7.12× | 1.9529 / 0.5473 / 0.3844 |
-| small | 384.6 s | 0.338 | 7,737 | 6.62× | 2.3325 / 0.6193 / 0.3704 |
+Monitor:
 
-Their first immutable checkpoints are `checkpoints/run-medium/selfplay-1793984389238123137.pt` and `checkpoints/run-small/selfplay-1793984438726959293.pt`. The two-run steady-state GPU snapshot used **1,359 / 8,188 MiB**, at 35% utilization; peak allocated tensor memory remained 132.4 / 71.4 MiB. WSL's per-process `nvidia-smi` memory was unavailable, so allocated peaks come from PyTorch metrics. Neither run is GPU-memory constrained; concurrent throughput supports keeping both running.
+```sh
+tail -f checkpoints/run-medium/train.log checkpoints/run-small/train.log
+nvidia-smi
+```
 
-Monitor with `tail -f checkpoints/run-medium/train.log checkpoints/run-small/train.log`. Machine-readable progress is in each run's `metrics.jsonl`: `selfplay_games` records batch generation, `train` records losses, `iteration` records wall time, throughput, replay size, sample reuse, peak allocated VRAM, and the timestamped checkpoint. Greedy solver evaluations are recorded as `evaluation` every five iterations (100 games). Replay and encoded minibatch storage are bounded; timestamped checkpoints and logs deliberately accumulate on disk.
+Stop gracefully at the next complete iteration; workers finish games and publish checkpoint/replay before exit:
 
-Stop medium with `kill -- -1729825`, or small with `kill -- -1729929`. These send SIGTERM to the entire launch process group, including the `uv` child. Resume by repeating that run's exact launch command above, changing `> .../train.log` to `>> .../train.log` to preserve console history; keep the same output directory and bootstrap argument (`latest.pt` wins automatically). The new launch has a new PID; record it with `echo $!`. Do not launch two processes into the same run directory.
+```sh
+kill -TERM -- -"$(cat checkpoints/run-medium/train.pid)"
+kill -TERM -- -"$(cat checkpoints/run-small/train.pid)"
+```
 
-To promote a result, stop or inspect the run, select an actual immutable `selfplay-<timestamp>.pt`, and add its path plus search settings to `registry.VARIANTS` as described above. Never register `latest.pt`, never repoint an existing entry, and do not register the in-progress runs automatically.
+Wait for process groups to exit before repeating launch commands. Never launch two trainers into one run directory. `latest.pt` is atomically published after immutable weights, optimizer state, and replay are complete. Two replay slots preserve the previous published checkpoint during writes; only the latest checkpoint is guaranteed a matching replay for continuation. Metrics include self-play generation, losses, iteration throughput/reuse, evaluations every five iterations, and retention decisions.
+
+### Throughput measurements
+
+Fixed seed **730000**, bootstrap weights, **32 games / 100 simulations / 100 updates**, batch size 128, CUDA, outputs under `/tmp`. Both original live process groups were SIGSTOP-paused during each benchmark pair and SIGCONT-resumed afterward; the concurrent arena was paused for optimized measurements. GPU percentages are sampled whole-GPU means; CPU is approximate steady-state search-process utilization (100% = one logical CPU). Iteration time includes startup/pool costs.
+
+| Network | Pipeline | Games/s | Seconds/iteration | GPU utilization | Search CPU |
+|---|---|---:|---:|---:|---:|
+| medium | baseline, 1×32 | 0.332 | 99.03 | 34% | ~102% |
+| medium | optimized, 2×16 | 0.581 | 58.30 | 37% | ~206% |
+| small | baseline, 1×32 | 0.350 | 93.78 | 29% | ~103% |
+| small | optimized, 2×16 | 0.576 | 58.38 | 38% | ~203% |
+
+Generation improved **1.75× medium / 1.65× small**. The earlier profile attributed 64% to forward+encoding and 15% to solver sampling. Encoding now batches neighbour sums instead of looping over states: a 32-state CPU microbenchmark improved **4.01 ms → 0.282 ms (14.2×)**. Neighbour sums accumulate in place; solver sampling caches conditional distributions and decoded reservoir cells without changing RNG draws. Persistent workers overlap CPU tree traversal and independent batched CUDA evaluation. Existing inference mode and CUDA BF16 remain enabled; search budgets, selection/noise, and sampling distributions are unchanged. Replay encoding uses bounded 1,024-position chunks.
+
+First completed iterations of the final tested-code launches, with both runs active:
+
+| Run | Iteration | Seconds | Games/s | New/replay positions | Sample reuse |
+|---|---:|---:|---:|---:|---:|
+| medium | 6 | 286.03 | 0.345 | 6,655 / 44,995 | 5.77× |
+| small | 5 | 250.98 | 0.404 | 6,190 / 35,041 | 6.20× |
+
+These contention-inclusive results are not the isolated benchmark. Both detached launches remain running and resumed previously published self-play weights, not bootstrap weights. The concurrent GPU snapshot reached 85% utilization at 2,024 / 8,188 MiB (including the arena).
+
+### Disk budget
+
+The budget is **100 GB decimal for the whole project**, including checkpoints, datasets, replay, logs, and the environment. After these iterations: **6.92 GB total project; 1.31 GB checkpoints** (logical file sizes, hard-linked `latest.pt` counted once). Self-play weights with AdamW occupy **3,934,581 bytes medium / 883,833 bytes small**. Each replay position is **3,339 bytes**: one saturated 50,000-position slot is ~167 MB; both slots for both runs plateau at ~668 MB. Until saturation, ~6,200–6,700 new positions add ~21–22 MB per run/iteration; replay is subsequently replaced, not accumulated.
+
+Pruning runs before generation and after each published iteration. It keeps **all bootstrap checkpoints; every tenth self-play iteration; the newest three iterations per run; `latest.pt`; both replay slots; datasets; and every path returned by lazily imported `registry.pinned_checkpoints()`**. Only other immutable `selfplay-*.pt` files are removed. Iteration numbers come from checkpoint metadata, never timestamps. An unavailable registry hook keeps everything and emits a warning. If protected data still puts the project/checkpoints over 100 GB, training warns loudly and stops; milestones and pinned generations are never sacrificed.
+
+```sh
+uv run python -m msflags.train prune --dry-run
+uv run python -m msflags.train prune
+```
+
+Without retention, a completed iteration pair adds ~4.82 MB of weights; every-tenth retention averages ~0.482 MB per pair, plus rolling newest-three files and additional pins. At observed concurrent iteration times, milestone growth is **~0.15 GB/day**, versus ~1.5 GB/day unpruned. Replay growth stops at its bound; logs and extra registered generations add to the estimate. The hard cap eventually stops training rather than deleting permanent generations.
+
+Promote immutable timestamped weights using the registry CLI described above (`uv run python -m msflags.registry --help`), never `latest.pt`. Never repoint a registered generation to different weights.
 
 ## Tests
 
