@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Minesweeper Flags</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<a class="skip-link" href="#content">Skip to content</a>
+<header class="site-header"><a class="brand" href="/">Minesweeper <span>Flags</span></a><nav aria-label="Main navigation"><a href="/" aria-current="page">Play</a><a href="/agents.html">AIs</a><a href="/arena.html">Arena</a></nav></header>
+<main id="content">
+  <h1>Minesweeper Flags</h1>
+  <form id="newGameForm" class="panel new-game">
+    <div class="seat"><label for="p0">Player 1</label><select id="p0" title="Human: you click. Random: random legal moves. Greedy exact solver: exact mine probabilities. ResNet Greedy policy: network, no search. ResNet MCTS: network + tree search."></select><a id="p0About" class="about" href="/agents.html">about</a></div>
+    <div class="seat"><label for="p1">Player 2</label><select id="p1" title="Human: you click. Random: random legal moves. Greedy exact solver: exact mine probabilities. ResNet Greedy policy: network, no search. ResNet MCTS: network + tree search."></select><a id="p1About" class="about" href="/agents.html">about</a></div>
+    <label title="Number of Monte Carlo tree-search simulations per move or hint. More simulations cost more time.">MCTS sims <input id="sims" type="number" min="1" step="1" value="200" required></label>
+    <label title="Optional integer random seed for a reproducible initial board. Leave blank for a random game.">Seed <input id="seed" type="number" step="1" placeholder="random"></label>
+    <button id="new" title="Replace the current game with a new board using the selected players, simulation count, and seed.">New game</button>
+  </form>
+  <section class="panel status-panel" aria-label="Game status">
+    <div id="score"><div class="player-panel player-0"><div class="player-meta"><span class="player-name"></span><small class="bomb-indicator"></small></div><strong class="player-points"></strong></div><div class="player-panel player-1"><div class="player-meta"><span class="player-name"></span><small class="bomb-indicator"></small></div><strong class="player-points"></strong></div><span id="target"></span></div>
+    <div class="status-lines"><div id="banner" aria-live="polite" title="The active player moves again after claiming a mine; opening a safe cell passes the turn.">Start a game</div>
+    <div id="lastMove" aria-live="polite"></div></div>
+    <div class="bomb-slot"><button id="bomb" type="button" aria-pressed="false" title="Arm your one-use bomb (B). Click a centre to open its clipped 5×5 area and claim mines; your turn then ends. Esc cancels.">Bomb (B)</button><span id="bombStatus" role="status" aria-live="polite"></span></div>
+  </section>
+  <div class="play-area">
+    <div class="board-wrap">
+      <canvas id="board" width="640" height="640" aria-label="Minesweeper board. Click an unknown raised tile on a human turn. Hover for cell details."></canvas>
+      <div id="cellTooltip" role="tooltip" hidden></div>
+    </div>
+    <aside class="sidebar">
+  <section class="panel hint-card" aria-label="AI hints">
+    <h2 title="Overlay an AI's view of the current position">AI hints</h2>
+    <p class="hint-caption">Overlay an AI's view of the current position</p>
+    <div class="hints">
+      <label title="Overlay the selected AI's estimated mine probabilities on unknown cells."><input id="hintOn" type="checkbox"> Hint</label>
+      <select id="hintAgent" aria-label="Hint agent" title="Random: random legal moves. Greedy exact solver: exact mine probabilities. ResNet Greedy policy: network, no search. ResNet MCTS: network + tree search."></select>
+      <label title="Show the AI's move preference: network policy for greedy-policy agents, search visit distribution for MCTS agents."><input id="showPolicy" type="checkbox"> Policy</label>
+      <select id="policyKind" aria-label="Policy action type" title="Open shows single-cell move probabilities. Bomb shows probabilities for 5×5 bomb centres, including already-opened centres."><option value="open">Open policy</option><option value="bomb">Bomb policy</option></select>
+      <span id="value" title="The AI's estimated outcome for the player to move: -1 is a sure loss, +1 is a sure win. A dash means this agent provides no value estimate.">Value: —</span>
+    </div>
+    <div class="hint-details"><span id="hintStatus" title="The active heatmap mode, or why the selected agent has no overlay." aria-live="polite"></span><span id="noBomb">No bomb available</span></div>
+    <div class="policy-legend" aria-label="Policy legend"><strong>Policy legend</strong><span>Brighter cells indicate preferred moves.</span></div>
+  </section>
+    <aside class="rules" aria-label="How to play"><h2>How to play</h2><ul><li>Claim a mine → +1 point and move again.</li><li>Open a safe cell → reveal it; turn passes.</li><li>Zero cells automatically open neighbours.</li><li>Bomb: once per player, 5×5; claims mines and reveals safe cells, then ends your turn.</li><li>First to 26 of 51 mines wins.</li></ul></aside></aside>
+  </div>
+  <div id="error" role="alert"></div>
+</main>
+<script src="/static/app.js"></script>
+</body>
+</html>

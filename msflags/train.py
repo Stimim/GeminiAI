@@ -1,0 +1,416 @@
+"""Solver distillation, batched information-set self-play, and alternating-seat arenas."""
+from __future__ import annotations
+
+import argparse
+from concurrent.futures import ProcessPoolExecutor
+from dataclasses import dataclass
+import json
+import math
+import os
+from pathlib import Path
+import time
+
+import numpy as np
+import torch
+import torch.nn.functional as F
+
+from .agents import RandomAgent, SolverAgent
+from .game import Config, Game, UNKNOWN, encode
+from .mcts import Search
+from .model import Evaluator, Net, NetConfig, load, save
+from .solver import Analysis
+
+
+@dataclass
+class Position:
+    board: np.ndarray
+    scores: list[int]
+    player: int
+    policy: np.ndarray
+    mine: np.ndarray
+    bombs: list[int]
+    value: float = 0.0
+
+
+def dihedral(x: np.ndarray, symmetry: int) -> np.ndarray:
+    """Apply one of eight square symmetries on the final two axes."""
+    y = np.rot90(x, symmetry % 4, axes=(-2, -1))
+    return np.flip(y, axis=-1) if symmetry >= 4 else y
+
+
+def augment(x, policy, mine, symmetry):
+    h, w = x.shape[-2:]
+    return (dihedral(x, symmetry).copy(),
+            dihedral(policy.reshape(-1, h, w), symmetry).reshape(policy.shape).copy(),
+            dihedral(mine.reshape(-1, h, w), symmetry).reshape(mine.shape).copy())
+
+
+def bootstrap_game(job):
+    cfg, seed, epsilon = job
+    rng = np.random.default_rng(seed)
+    g = Game.random(cfg, rng)
+    positions = []
+    while not g.done:
+        pub = g.public()
+        a = Analysis(pub, rng=rng)
+        best = SolverAgent(rng).best_actions(pub, a.probs)
+        # The solver can fall back to sampling on hard components. Those
+        # positions may drive play, but must not masquerade as exact labels.
+        if a.exact:
+            target = np.zeros(2 * cfg.n, np.float32)
+            target[best] = 1 / len(best)
+            positions.append(Position(g.board.copy(), list(g.scores), g.to_move, target,
+                                      a.probs.astype(np.float32), bombs=list(g.bombs)))
+        legal = g.legal_actions()
+        action = rng.choice(legal if rng.random() < epsilon else best)
+        g.step(int(action))
+    for p in positions:
+        p.value = 1. if p.player == g.winner else -1.
+    return positions
+
+
+def pack(positions, cfg):
+    return dict(board=np.stack([p.board for p in positions]),
+                scores=np.array([p.scores for p in positions], np.int16),
+                bombs=np.array([p.bombs for p in positions], np.int8),
+                player=np.array([p.player for p in positions], np.int8),
+                policy=np.stack([p.policy for p in positions]).astype(np.float32),
+                mine=np.stack([p.mine for p in positions]).astype(np.float32),
+                value=np.array([p.value for p in positions], np.float32))
+
+
+def log(args, event, **fields):
+    record = dict(event=event, time=time.time(), **fields)
+    print(json.dumps(record), flush=True)
+    with (Path(args.output) / 'metrics.jsonl').open('a') as f:
+        f.write(json.dumps(record) + '\n')
+
+
+def checkpoint(net, args, tag, **metadata):
+    path = Path(args.output)
+    source = Path(args.checkpoint) if args.checkpoint else path / 'latest.pt'
+    if source.exists():
+        prior = torch.load(source, map_location='cpu', weights_only=False)
+        if prior.get('transferred_from'):
+            metadata.setdefault('transferred_from', prior['transferred_from'])
+    save(net, str(path / f'{tag}.pt'), **metadata)
+    save(net, str(path / 'latest.pt'), **metadata)
+
+
+def fit(net, data, args, steps, optimizer=None):
+    """Random replay minibatches; augmentation is shared by inputs and both cell heads."""
+    optimizer = optimizer or torch.optim.AdamW(net.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+    n = len(data['board'])
+    rng = np.random.default_rng(args.seed)
+    cfg = Config(args.size, args.size, args.mines)
+    start = time.monotonic()
+    # Compact preencoded CPU storage avoids repeating neighbour computations per epoch.
+    availability = data['bombs']
+    x = np.stack([encode(b, s, int(p), cfg, bombs) for b, s, p, bombs in
+                  zip(data['board'], data['scores'], data['player'], availability)]).astype(np.float16)
+    net.train()
+    total = np.zeros(3)
+    for step in range(1, steps + 1):
+        ids = rng.integers(n, size=args.batch_size)
+        xb, pi, mine = augment(x[ids], data['policy'][ids], data['mine'][ids], int(rng.integers(8)))
+        xb = torch.as_tensor(xb, device=args.device, dtype=torch.float32)
+        pi = torch.as_tensor(pi, device=args.device)
+        mine = torch.as_tensor(mine, device=args.device)
+        value = torch.as_tensor(data['value'][ids], device=args.device)
+        with torch.autocast(device_type=torch.device(args.device).type, dtype=torch.bfloat16,
+                            enabled=torch.device(args.device).type == 'cuda'):
+            logits, pred_value, pred_mine = net(xb)
+            policy_loss = -(pi * F.log_softmax(logits.float(), 1)).sum(1).mean()
+            value_loss = F.mse_loss(pred_value.float(), value)
+            mask = xb[:, 0].flatten(1)
+            mine_loss = (F.binary_cross_entropy_with_logits(pred_mine.float(), mine, reduction='none') * mask).sum() / mask.sum()
+            loss = policy_loss + args.value_weight * value_loss + args.mine_weight * mine_loss
+        optimizer.zero_grad(set_to_none=True)
+        loss.backward()
+        optimizer.step()
+        total += [policy_loss.item(), value_loss.item(), mine_loss.item()]
+        if step % args.log_every == 0 or step == steps:
+            denom = args.log_every if step % args.log_every == 0 else step % args.log_every
+            log(args, 'train', step=step, policy_loss=total[0]/denom, value_loss=total[1]/denom,
+                mine_loss=total[2]/denom, steps_per_second=step/(time.monotonic()-start))
+            total[:] = 0
+    net.eval()
+    return optimizer
+
+
+def new_or_load(args, required=False):
+    path = Path(args.checkpoint or str(Path(args.output) / 'latest.pt'))
+    if path.exists():
+        net = load(str(path), args.device)[0]
+        return net
+    if required or args.checkpoint:
+        raise FileNotFoundError(path)
+    return Net(NetConfig(args.channels, args.blocks, args.policy_beta)).to(args.device)
+
+
+def bootstrap(args):
+    cfg = Config(args.size, args.size, args.mines)
+    data_path = Path(args.data or str(Path(args.output) / 'bootstrap-exact.npz'))
+    if data_path.exists():
+        with np.load(data_path) as stored:
+            data = dict(stored)
+        if data['board'].shape[1] != cfg.n or data['policy'].shape[1] != 2 * cfg.n:
+            raise ValueError('dataset must match the board size and contain 2N actions')
+        log(args, 'loaded_data', positions=len(data['board']))
+    else:
+        positions = []
+        start = time.monotonic()
+        jobs = [(cfg, args.seed + i, args.epsilon) for i in range(args.games)]
+        with ProcessPoolExecutor(max_workers=args.workers) as pool:
+            for i, samples in enumerate(pool.map(bootstrap_game, jobs, chunksize=1), 1):
+                positions.extend(samples)
+                if i % args.game_log_every == 0 or i == args.games:
+                    log(args, 'bootstrap_games', games=i, positions=len(positions), games_per_second=i/(time.monotonic()-start))
+        data = pack(positions, cfg)
+        del positions
+        np.savez(data_path, **data)
+    net = new_or_load(args)
+    for epoch in range(1, args.iterations + 1):
+        fit(net, data, args, args.steps)
+        prior = load(args.checkpoint, 'cpu')[1] if args.checkpoint else {}
+        checkpoint(net, args, f'bootstrap-{time.time_ns()}', stage='bootstrap', iteration=epoch,
+                   bootstrap_steps=args.steps * epoch, selfplay_iterations=0,
+                   **({'transferred_from': prior['transferred_from']} if 'transferred_from' in prior else {}))
+
+
+def run_searches(searches, evaluator, cfg):
+    """One leaf per live search per GPU batch, until every budget is exhausted."""
+    active = list(searches)
+    while active:
+        pending, leaves = [], []
+        for s in active:
+            leaf = s.next_leaf()
+            if leaf is not None:
+                pending.append(s)
+                leaves.append(leaf)
+        if not pending:
+            break
+        policies, values, _ = evaluator(leaves, cfg)
+        for s, pi, v in zip(pending, policies, values):
+            s.provide(pi, float(v))
+        active = pending
+
+
+def selfplay_batch(args, evaluator, seed):
+    cfg = Config(args.size, args.size, args.mines)
+    rng = np.random.default_rng(seed)
+    games = [Game.random(cfg, rng) for _ in range(args.games)]
+    histories = [[] for _ in games]
+    roots = [None] * len(games)
+    moves = [0] * len(games)
+    active = list(range(len(games)))
+    start = time.monotonic()
+    while active:
+        searches = [Search(games[i].public(), args.sims, rng=rng, root=roots[i],
+                           c_puct=args.c_puct, fpu_reduction=args.fpu_reduction,
+                           dirichlet_alpha=args.dirichlet_alpha,
+                           dirichlet_frac=args.dirichlet_frac) for i in active]
+        run_searches(searches, evaluator, cfg)
+        next_active = []
+        for i, s in zip(active, searches):
+            g = games[i]
+            pi = s.visit_policy().astype(np.float32)
+            histories[i].append(Position(g.board.copy(), list(g.scores), g.to_move, pi,
+                                         s.analysis.probs.astype(np.float32), bombs=list(g.bombs)))
+            if moves[i] < args.temperature_moves and args.temperature > 0:
+                weights = pi.astype(np.float64) ** (1 / args.temperature)
+                action = int(rng.choice(len(pi), p=weights / weights.sum()))
+            else:
+                action = s.best_action()
+            g.step(action)
+            roots[i] = s.child_root(action, g.board)
+            moves[i] += 1
+            if not g.done:
+                next_active.append(i)
+        active = next_active
+    positions = []
+    for g, history in zip(games, histories):
+        for p in history:
+            p.value = 1. if p.player == g.winner else -1.
+        positions.extend(history)
+    log(args, 'selfplay_games', games=len(games), positions=len(positions), games_per_second=len(games)/(time.monotonic()-start))
+    return pack(positions, cfg)
+
+
+def selfplay_games(args, evaluator, seed):
+    batches = []
+    for offset in range(0, args.games, args.concurrent_games):
+        batch_args = argparse.Namespace(**vars(args))
+        batch_args.games = min(args.concurrent_games, args.games - offset)
+        batches.append(selfplay_batch(batch_args, evaluator, seed + offset))
+    return {k: np.concatenate([batch[k] for batch in batches]) for k in batches[0]}
+
+
+def selfplay(args):
+    net = new_or_load(args, required=True)
+    from .registry import training_counts
+    source = Path(args.checkpoint or str(Path(args.output) / 'latest.pt'))
+    prior = torch.load(source, map_location='cpu', weights_only=False)
+    bootstrap_steps, previous_iterations = training_counts(source, prior)
+    optimizer = torch.optim.AdamW(net.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+    replay = None
+    replay_path = Path(args.output) / 'replay.npz'
+    if replay_path.exists():
+        with np.load(replay_path) as stored:
+            replay = dict(stored)
+    for iteration in range(1, args.iterations + 1):
+        data = selfplay_games(args, Evaluator(net, args.device), args.seed + iteration)
+        replay = {k: data[k][-args.replay_size:] if replay is None else
+                  np.concatenate((replay[k], data[k]))[-args.replay_size:] for k in data}
+        np.savez(replay_path, **replay)
+        fit(net, replay, args, args.steps, optimizer)
+        checkpoint(net, args, f'selfplay-{time.time_ns()}', stage='selfplay', iteration=iteration,
+                   bootstrap_steps=bootstrap_steps, selfplay_iterations=previous_iterations + iteration)
+        if args.eval_every and iteration % args.eval_every == 0:
+            result = arena_games(args, 'greedy', 'solver', args.eval_games, net=net)
+            log(args, 'evaluation', iteration=iteration, **result)
+
+
+def wilson(wins, games):
+    z = 1.959963984540054
+    p = wins / games
+    d = 1 + z*z/games
+    middle = (p + z*z/(2*games)) / d
+    half = z * math.sqrt(p*(1-p)/games + z*z/(4*games*games)) / d
+    return [middle-half, middle+half]
+
+
+def arena_games(args, first, second, count, net=None):
+    cfg = Config(args.size, args.size, args.mines)
+    rng = np.random.default_rng(args.seed)
+    from . import registry
+    entries = [
+        dict(id=agent_id, kind='net', settings={}) if net is not None and agent_id == 'greedy'
+        else registry._entry(agent_id)
+        for agent_id in (first, second)
+    ]
+    kinds = [entry['kind'] for entry in entries]
+    evaluators = {}
+    for side, entry in enumerate(entries):
+        if entry['kind'] in ('net', 'mcts'):
+            override = args.checkpoint if side == 0 else getattr(args, 'checkpoint_b', None)
+            path = override or entry.get('checkpoint')
+            model = net if net is not None else load(path, args.device)[0]
+            evaluators[side] = Evaluator(model, args.device)
+    basic = {'solver': SolverAgent(rng), 'random': RandomAgent(rng)}
+    wins = 0
+    start = time.monotonic()
+    completed = 0
+    for offset in range(0, count, args.concurrent_games):
+        ids = list(range(offset, min(count, offset+args.concurrent_games)))
+        games = [Game.random(cfg, rng) for _ in ids]
+        active = list(range(len(games)))
+        while active:
+            actions = {}
+            for side, kind in enumerate(kinds):
+                selected = [i for i in active if (games[i].to_move ^ (ids[i] % 2)) == side]
+                if not selected:
+                    continue
+                if kind in basic:
+                    actions.update({i: basic[kind].act(games[i].public()) for i in selected})
+                elif kind == 'net':
+                    policies, _, _ = evaluators[side]([(games[i].board, games[i].scores, games[i].to_move, games[i].bombs) for i in selected], cfg)
+                    actions.update({i: int(np.argmax(p)) for i, p in zip(selected, policies)})
+                else:
+                    settings = entries[side]['settings']
+                    override = args.checkpoint if side == 0 else getattr(args, 'checkpoint_b', None)
+                    if override:
+                        settings = dict(sims=args.sims, c_puct=args.c_puct, fpu_reduction=args.fpu_reduction)
+                    searches = [Search(games[i].public(), rng=rng, **settings) for i in selected]
+                    run_searches(searches, evaluators[side], cfg)
+                    actions.update({i: s.best_action() for i, s in zip(selected, searches)})
+            remaining = []
+            for i in active:
+                games[i].step(actions[i])
+                if games[i].done:
+                    wins += int((games[i].winner ^ (ids[i] % 2)) == 0)
+                    completed += 1
+                else:
+                    remaining.append(i)
+            active = remaining
+        log(args, 'arena_progress', games=completed, wins=wins, games_per_second=completed/(time.monotonic()-start))
+    return dict(agent_a=first, agent_b=second, games=count, wins=wins, win_rate=wins/count,
+                confidence_95=wilson(wins,count), seconds=time.monotonic()-start)
+
+
+def arena(args):
+    log(args, 'arena', **arena_games(args, args.agent_a, args.agent_b, args.games))
+
+
+def parser():
+    p = argparse.ArgumentParser(description=__doc__)
+    subs = p.add_subparsers(dest='command', required=True)
+    for name in ('bootstrap', 'selfplay', 'arena'):
+        s = subs.add_parser(name)
+        s.add_argument('--output', default='checkpoints')
+        s.add_argument('--checkpoint')
+        s.add_argument('--device', default='cuda' if torch.cuda.is_available() else 'cpu')
+        s.add_argument('--size', type=int, default=16)
+        s.add_argument('--mines', type=int, default=51)
+        s.add_argument('--seed', type=int, default=42)
+        s.add_argument('--games', type=int, default=1000 if name == 'bootstrap' else 32 if name == 'selfplay' else 200)
+        s.add_argument('--threads', type=int, default=4)
+        s.add_argument('--sims', type=int, default=100)
+        s.add_argument('--c-puct', type=float, default=1.5)
+        s.add_argument('--fpu-reduction', type=float, default=0.2)
+        s.add_argument('--concurrent-games', type=int, default=32)
+        if name != 'arena':
+            s.add_argument('--iterations', type=int, default=1 if name == 'bootstrap' else 10)
+            s.add_argument('--steps', type=int, default=5000 if name == 'bootstrap' else 500)
+            s.add_argument('--batch-size', type=int, default=128)
+            s.add_argument('--lr', type=float, default=0.001)
+            s.add_argument('--weight-decay', type=float, default=0.0001)
+            s.add_argument('--mine-weight', type=float, default=2.)
+            s.add_argument('--value-weight', type=float, default=0.25)
+            s.add_argument('--log-every', type=int, default=100)
+        if name == 'bootstrap':
+            s.add_argument('--workers', type=int, default=min(12, os.cpu_count() or 1))
+            s.add_argument('--epsilon', type=float, default=0.08)
+            s.add_argument('--channels', type=int, default=64)
+            s.add_argument('--blocks', type=int, default=4)
+            s.add_argument('--policy-beta', type=float, default=3.)
+            s.add_argument('--data')
+            s.add_argument('--game-log-every', type=int, default=100)
+        if name == 'selfplay':
+            s.add_argument('--replay-size', type=int, default=100000)
+            s.add_argument('--dirichlet-alpha', type=float, default=0.15)
+            s.add_argument('--dirichlet-frac', type=float, default=0.25)
+            s.add_argument('--temperature', type=float, default=1.)
+            s.add_argument('--temperature-moves', type=int, default=30)
+            s.add_argument('--eval-every', type=int, default=1)
+            s.add_argument('--eval-games', type=int, default=40)
+        if name == 'arena':
+            from . import registry
+            ids = [entry['id'] for entry in registry.catalog()]
+            default = next(entry['id'] for entry in registry.catalog() if entry.get('request_sims'))
+            s.add_argument('--agent-a', choices=ids, default=default,
+                           help='Catalog identity; --checkpoint overrides its weights for an unrecorded evaluation.')
+            s.add_argument('--agent-b', choices=ids, default='solver')
+            s.add_argument('--checkpoint-b')
+    return p
+
+
+def main():
+    p = parser()
+    args = p.parse_args()
+    if args.size < 2 or args.mines < 1 or args.mines >= args.size**2 or args.mines % 2 == 0:
+        p.error('use a square board with a positive odd mine count smaller than its area (no draws)')
+    if args.games < 1 or args.sims < 1 or args.concurrent_games < 1:
+        p.error('games, sims, and concurrent-games must be positive')
+    torch.set_num_threads(args.threads)
+    torch.manual_seed(args.seed)
+    if torch.cuda.is_available():
+        torch.backends.cudnn.benchmark = True
+        torch.set_float32_matmul_precision('high')
+    Path(args.output).mkdir(parents=True, exist_ok=True)
+    log(args, 'start', command=args.command, arguments=vars(args))
+    globals()[args.command](args)
+
+
+if __name__ == '__main__':
+    main()

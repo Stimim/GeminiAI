@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Arena · Minesweeper Flags</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath fill='%2324569c' d='M7 3h3v26H7zM10 4h16l-5 7 5 7H10z'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/arena.css">
+  <script src="/static/arena.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="site-header"><a class="brand" href="/">Minesweeper <span>Flags</span></a><nav aria-label="Main navigation"><a href="/">Play</a><a href="/agents.html">AIs</a><a href="/arena.html" aria-current="page">Arena</a></nav></header>
+  <main id="content" class="workspace">
+    <div class="page-heading"><div><p class="eyebrow">Head to head</p><h1>The arena</h1><p class="lede">Choose two AIs, watch them compete, and see how the field stacks up.</p></div><a class="text-link" href="/agents.html">Explore the AIs →</a></div>
+    <section class="surface match-setup" aria-labelledby="setup-title">
+      <div class="section-heading"><h2 id="setup-title">Set up a match</h2><span class="muted">AI vs. AI</span></div>
+      <form id="match-form" class="match-form">
+        <label for="agent-a">Contender A<select id="agent-a" required disabled><option value="">Loading agents…</option></select></label>
+        <span class="versus" aria-hidden="true">vs</span>
+        <label for="agent-b">Contender B<select id="agent-b" required disabled><option value="">Loading agents…</option></select></label>
+        <label for="game-count">Games<input id="game-count" type="number" min="1" max="1000" step="1" value="10" required aria-describedby="count-help"></label>
+        <button id="start-match" type="submit" disabled>Start match</button>
+      </form>
+      <p id="count-help" class="muted small">1–1000 games, running in the background. Watch the latest board below.</p>
+      <div id="setup-error" class="notice error" role="alert" hidden></div>
+    </section>
+    <section id="match-section" class="surface match-view" aria-labelledby="match-title" hidden>
+      <div class="section-heading"><h2 id="match-title">Match in progress</h2><span id="match-status" class="badge">Queued</span></div>
+      <p id="match-progress-text" role="status" aria-live="polite"></p>
+      <progress id="match-progress" max="1" value="0" aria-label="Completed games"></progress>
+      <div id="match-error" class="notice error" role="alert" hidden></div>
+      <button id="retry-match" class="secondary" type="button" hidden>Resume live updates</button>
+      <div class="match-columns">
+        <section class="live-game" aria-labelledby="live-title"><div class="section-heading"><h3 id="live-title">Live board</h3><span id="board-meta" class="muted small"></span></div>
+          <p id="board-status" role="status">Waiting for the first game…</p>
+          <div id="scoreboard" class="scoreboard" hidden></div>
+          <div class="arena-board-wrap"><div id="arena-board" class="arena-board" role="table" aria-label="Live Minesweeper board" hidden></div></div>
+          <p class="board-legend small"><span class="player-one">● Player 1</span><span class="player-two">● Player 2</span><span>Flag = claimed mine · outline = last move</span></p>
+        </section>
+        <section class="results" aria-labelledby="results-title"><h3 id="results-title">Match results</h3><div id="results-summary" class="result-summary">No completed games yet.</div><div id="results-table" class="table-scroll"></div></section>
+      </div>
+    </section>
+    <section class="surface leaderboard" aria-labelledby="ratings-title">
+      <div class="section-heading"><div><p class="eyebrow">The field</p><h2 id="ratings-title">Leaderboard</h2></div><button id="refresh-ratings" class="secondary" type="button">Refresh ratings</button></div>
+      <p class="muted">Elo ratings with 95% confidence intervals. Higher is stronger.</p>
+      <div id="ratings-error" class="notice error" role="alert" hidden></div>
+      <p id="ratings-status" role="status">Loading ratings…</p>
+      <div class="table-scroll"><table id="ratings-table" hidden><caption class="sr-only">AI Elo ratings and 95% confidence intervals</caption><thead><tr><th scope="col">Rank</th><th scope="col">Agent</th><th scope="col">Elo ± 95% CI</th><th scope="col" class="numeric">Games</th></tr></thead><tbody id="ratings-body"></tbody></table></div>
+      <details class="rating-notes"><summary>How to read these ratings</summary><p>The solver is the fixed anchor at 1000 Elo. Ratings use all recorded arena results, not just the match shown here. Every player has one 5×5 bomb per game. Regularization stabilizes estimates when evidence is sparse; the anchor defines the scale, not a guaranteed level of performance.</p><p>The ± value is the estimated 95% confidence half-width. Wider intervals mean less certainty, especially with few games. Overlapping intervals are not strong evidence of a difference. The fixed anchor has no estimated rating uncertainty.</p></details>
+    </section>
+    <noscript><p class="notice">Enable JavaScript to run arena matches and view ratings.</p></noscript>
+  </main>
+  <footer class="site-footer">Minesweeper Flags <span aria-hidden="true">·</span> Claim mines. Keep the turn. Win the majority.</footer>
+</body>
+</html>
