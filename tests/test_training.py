@@ -204,7 +204,7 @@ def test_bootstrap_records_joint_policies_and_bomb_inventory():
     np.testing.assert_allclose(data['policy'].sum(1), 1.)
 
 
-def test_training_uses_bomb_positions_and_preserves_checkpoint_provenance(tmp_path):
+def test_training_uses_bomb_positions_and_saves_training_counts(tmp_path):
     from argparse import Namespace
     from msflags.model import Net, NetConfig, load, save
     from msflags.train import bootstrap_game, checkpoint, fit, pack
@@ -212,7 +212,7 @@ def test_training_uses_bomb_positions_and_preserves_checkpoint_provenance(tmp_pa
     data = pack(bootstrap_game((cfg, 12, 0.1)), cfg)
     source = tmp_path / 'source.pt'
     net = Net(NetConfig(channels=8, blocks=1))
-    save(net, source, transferred_from='historical/source.pt')
+    save(net, source)
     args = Namespace(size=4, mines=3, seed=5, batch_size=2, device='cpu',
                      lr=0.001, weight_decay=0.0001, value_weight=0.25,
                      mine_weight=2., log_every=1, output=str(tmp_path),
@@ -221,7 +221,6 @@ def test_training_uses_bomb_positions_and_preserves_checkpoint_provenance(tmp_pa
     checkpoint(net, args, 'trained', stage='bootstrap', bootstrap_steps=1)
     restored, metadata = load(tmp_path / 'latest.pt')
     assert not restored.training
-    assert metadata['transferred_from'] == 'historical/source.pt'
     assert metadata['bootstrap_steps'] == 1
     assert 'rules' not in metadata['net_cfg']
 
@@ -230,3 +229,78 @@ def test_network_configuration_rejects_non_twenty_plane_inputs():
     from msflags.model import NetConfig
     with pytest.raises(ValueError, match='20 input planes'):
         NetConfig(planes=18)
+
+
+@pytest.mark.parametrize('preset,channels,blocks', [('small', 32, 3), ('medium', 64, 4)])
+def test_network_size_presets(tmp_path, preset, channels, blocks):
+    from msflags.train import new_or_load, parser
+    args = parser().parse_args(['bootstrap', '--network-size', preset, '--device', 'cpu',
+                                '--output', str(tmp_path)])
+    net = new_or_load(args)
+    assert net.cfg.channels == channels
+    assert net.cfg.blocks == blocks
+
+
+def test_selfplay_resumes_latest_with_matching_bounded_replay(tmp_path, monkeypatch):
+    from msflags import train
+    from msflags.model import Net, NetConfig, load, save
+    cfg = Config(4, 4, 3)
+    data = train.pack(train.bootstrap_game((cfg, 12, 0.1)), cfg)
+    data = {key: np.concatenate([value] * 4) for key, value in data.items()}
+    source = tmp_path / 'bootstrap.pt'
+    save(Net(NetConfig(channels=8, blocks=1)), source,
+         stage='bootstrap', bootstrap_steps=8000, selfplay_iterations=0)
+    args = train.parser().parse_args([
+        'selfplay', '--checkpoint', str(source), '--output', str(tmp_path),
+        '--device', 'cpu', '--size', '4', '--mines', '3', '--iterations', '1',
+        '--steps', '1', '--batch-size', '2', '--replay-size', '3', '--eval-every', '0'])
+    seeds = []
+    fitted = []
+
+    def generated(args, evaluator, seed):
+        seeds.append(seed)
+        return data
+
+    def fitted_replay(net, replay, args, steps, optimizer):
+        fitted.append((args.iteration, len(replay['board'])))
+        return optimizer
+
+    monkeypatch.setattr(train, 'selfplay_games', generated)
+    monkeypatch.setattr(train, 'fit', fitted_replay)
+    train.selfplay(args)
+    first = load(tmp_path / 'latest.pt')[1]
+    first_replay = (tmp_path / first['replay_file']).read_bytes()
+    assert first['selfplay_iterations'] == 1
+    assert 'optimizer' in first
+    # Reusing the exact original launch command must prefer run/latest.pt.
+    args.checkpoint = str(source)
+    args.iterations = 2
+    train.selfplay(args)
+    second = load(tmp_path / 'latest.pt')[1]
+    assert second['selfplay_iterations'] == 2
+    assert second['replay_file'] != first['replay_file']
+    assert (tmp_path / first['replay_file']).read_bytes() == first_replay
+    assert seeds == [args.seed + 1, args.seed + 2]
+    assert fitted == [(1, 3), (2, 3)]
+    assert len(list(tmp_path.glob('selfplay-*.pt'))) == 2
+
+
+def test_failed_checkpoint_write_keeps_latest_and_timestamped_weights(tmp_path, monkeypatch):
+    from argparse import Namespace
+    from msflags import train
+    from msflags.model import Net, NetConfig, load
+    args = Namespace(output=str(tmp_path))
+    net = Net(NetConfig(channels=8, blocks=1))
+    first = train.checkpoint(net, args, 'selfplay-1', selfplay_iterations=1)
+    first_bytes = first.read_bytes()
+
+    def interrupted(net, path, **metadata):
+        with open(path, 'wb') as stream:
+            stream.write(b'incomplete')
+        raise OSError('interrupted write')
+
+    monkeypatch.setattr(train, 'save', interrupted)
+    with pytest.raises(OSError, match='interrupted write'):
+        train.checkpoint(net, args, 'selfplay-2', selfplay_iterations=2)
+    assert first.read_bytes() == first_bytes
+    assert load(tmp_path / 'latest.pt')[1]['selfplay_iterations'] == 1

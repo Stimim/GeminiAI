@@ -1,8 +1,4 @@
-"""Stable arena identities and lazy shared checkpoint evaluators.
-
-Transferred checkpoints retain ``tr-`` in their training identity and expose
-their historical ``transferred_from`` provenance.
-"""
+"""Stable arena identities and lazy shared checkpoint evaluators."""
 from __future__ import annotations
 
 import json
@@ -30,8 +26,9 @@ def configure(device='cpu'):
 
 # Never repoint an existing variant: add a new immutable checkpoint/search pair.
 VARIANTS = [
-    ('checkpoints/bomb/bootstrap-1793979495800377617.pt', None),
-    ('checkpoints/bomb/bootstrap-1793979495800377617.pt', dict(sims=100, c_puct=1.5, fpu_reduction=0.2)),
+    ('checkpoints/bootstrap-medium/bootstrap-1793983777620140569.pt', None),
+    ('checkpoints/bootstrap-small/bootstrap-1793983891981972304.pt', None),
+    ('checkpoints/bootstrap-medium/bootstrap-1793983777620140569.pt', dict(sims=100, c_puct=1.5, fpu_reduction=0.2)),
 ]
 _identities: dict[tuple[str, int], tuple[dict, dict]] = {}
 
@@ -71,17 +68,12 @@ def _neural_entry(checkpoint, search):
         if key not in _identities:
             ck = torch.load(path, map_location='cpu', weights_only=False)
             training = dict(zip(('bootstrap', 'selfplay'), training_counts(path, ck)))
-            training['transfer'] = ck.get('transferred_from')
             _identities[key] = (ck['net_cfg'], training)
         shape, training = _identities[key]
     bootstrap = format(training['bootstrap'] / 1000, 'g') + 'k'
     arch = f"r{shape['channels']}x{shape['blocks']}"
     trained = f'bs{bootstrap}'
-    if training['transfer']:
-        trained = 'tr-' + trained
     description = f'{bootstrap} bootstrap'
-    if training['transfer']:
-        description += ' (transferred)'
     if training['selfplay']:
         trained += f"-sp{training['selfplay']}"
         description += f" + {training['selfplay']} self-play"
@@ -164,7 +156,7 @@ def _provenance(path, checkpoint):
     for session in sessions:
         session.pop('_last_step', None)
     return dict(stage=checkpoint.get('stage'), iteration=checkpoint.get('iteration'),
-                transferred_from=checkpoint.get('transferred_from'), training=sessions,
+                training=sessions,
                 metrics=str(metrics) if metrics.exists() else None)
 
 

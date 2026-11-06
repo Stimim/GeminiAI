@@ -81,27 +81,34 @@ def pack(positions, cfg):
 
 def log(args, event, **fields):
     record = dict(event=event, time=time.time(), **fields)
+    if hasattr(args, 'iteration'):
+        record.setdefault('iteration', args.iteration)
     print(json.dumps(record), flush=True)
     with (Path(args.output) / 'metrics.jsonl').open('a') as f:
         f.write(json.dumps(record) + '\n')
 
 
 def checkpoint(net, args, tag, **metadata):
+    """Publish complete timestamped weights before atomically updating latest."""
     path = Path(args.output)
-    source = Path(args.checkpoint) if args.checkpoint else path / 'latest.pt'
-    if source.exists():
-        prior = torch.load(source, map_location='cpu', weights_only=False)
-        if prior.get('transferred_from'):
-            metadata.setdefault('transferred_from', prior['transferred_from'])
-    save(net, str(path / f'{tag}.pt'), **metadata)
-    save(net, str(path / 'latest.pt'), **metadata)
+    temporary = path / '.checkpoint.tmp'
+    target = path / f'{tag}.pt'
+    save(net, str(temporary), **metadata)
+    os.replace(temporary, target)
+    latest = path / '.latest.tmp'
+    # Checkpoints are immutable; a hard link avoids copying optimizer tensors.
+    if latest.exists():
+        latest.unlink()
+    os.link(target, latest)
+    os.replace(latest, path / 'latest.pt')
+    return target
 
 
 def fit(net, data, args, steps, optimizer=None):
     """Random replay minibatches; augmentation is shared by inputs and both cell heads."""
     optimizer = optimizer or torch.optim.AdamW(net.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     n = len(data['board'])
-    rng = np.random.default_rng(args.seed)
+    rng = np.random.default_rng(args.seed + getattr(args, 'iteration', 0))
     cfg = Config(args.size, args.size, args.mines)
     start = time.monotonic()
     # Compact preencoded CPU storage avoids repeating neighbour computations per epoch.
@@ -145,7 +152,9 @@ def new_or_load(args, required=False):
         return net
     if required or args.checkpoint:
         raise FileNotFoundError(path)
-    return Net(NetConfig(args.channels, args.blocks, args.policy_beta)).to(args.device)
+    preset = getattr(args, 'network_size', None)
+    channels, blocks = {'small': (32, 3), 'medium': (64, 4)}[preset] if preset else (args.channels, args.blocks)
+    return Net(NetConfig(channels, blocks, args.policy_beta)).to(args.device)
 
 
 def bootstrap(args):
@@ -172,10 +181,8 @@ def bootstrap(args):
     net = new_or_load(args)
     for epoch in range(1, args.iterations + 1):
         fit(net, data, args, args.steps)
-        prior = load(args.checkpoint, 'cpu')[1] if args.checkpoint else {}
         checkpoint(net, args, f'bootstrap-{time.time_ns()}', stage='bootstrap', iteration=epoch,
-                   bootstrap_steps=args.steps * epoch, selfplay_iterations=0,
-                   **({'transferred_from': prior['transferred_from']} if 'transferred_from' in prior else {}))
+                   bootstrap_steps=args.steps * epoch, selfplay_iterations=0)
 
 
 def run_searches(searches, evaluator, cfg):
@@ -247,28 +254,60 @@ def selfplay_games(args, evaluator, seed):
 
 
 def selfplay(args):
-    net = new_or_load(args, required=True)
+    # A run directory always wins over its original bootstrap --checkpoint.
+    latest = Path(args.output) / 'latest.pt'
+    source = latest if latest.exists() else Path(args.checkpoint or latest)
+    args.checkpoint = str(source)
+    net, prior = load(source, args.device)
     from .registry import training_counts
-    source = Path(args.checkpoint or str(Path(args.output) / 'latest.pt'))
-    prior = torch.load(source, map_location='cpu', weights_only=False)
     bootstrap_steps, previous_iterations = training_counts(source, prior)
     optimizer = torch.optim.AdamW(net.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+    if 'optimizer' in prior:
+        optimizer.load_state_dict(prior['optimizer'])
+        for group in optimizer.param_groups:
+            group['lr'] = args.lr
     replay = None
-    replay_path = Path(args.output) / 'replay.npz'
+    replay_path = Path(args.output) / prior.get('replay_file', 'replay.npz')
     if replay_path.exists():
         with np.load(replay_path) as stored:
-            replay = dict(stored)
-    for iteration in range(1, args.iterations + 1):
+            replay = {k: stored[k][-args.replay_size:].copy() for k in stored.files}
+    elif prior.get('replay_file'):
+        raise FileNotFoundError(f'checkpoint replay buffer missing: {replay_path}')
+    log(args, 'resume', checkpoint=str(source), completed_iterations=previous_iterations,
+        replay_positions=0 if replay is None else len(replay['board']))
+    for iteration in range(previous_iterations + 1, args.iterations + 1):
+        args.iteration = iteration
+        started = time.monotonic()
+        if torch.device(args.device).type == 'cuda':
+            torch.cuda.reset_peak_memory_stats(args.device)
+        generation_start = time.monotonic()
         data = selfplay_games(args, Evaluator(net, args.device), args.seed + iteration)
-        replay = {k: data[k][-args.replay_size:] if replay is None else
-                  np.concatenate((replay[k], data[k]))[-args.replay_size:] for k in data}
-        np.savez(replay_path, **replay)
+        generation_seconds = time.monotonic() - generation_start
+        new_positions = len(data['board'])
+        replay = {k: data[k][-args.replay_size:].copy() if replay is None else
+                  np.concatenate((replay[k], data[k]))[-args.replay_size:].copy() for k in data}
+        del data
         fit(net, replay, args, args.steps, optimizer)
-        checkpoint(net, args, f'selfplay-{time.time_ns()}', stage='selfplay', iteration=iteration,
-                   bootstrap_steps=bootstrap_steps, selfplay_iterations=previous_iterations + iteration)
+        # Alternate slots keep the last published checkpoint's replay intact
+        # if interrupted while writing the next iteration.
+        replay_file = f'replay-{iteration % 2}.npz'
+        temporary = Path(args.output) / '.replay.tmp'
+        with temporary.open('wb') as stream:
+            np.savez(stream, **replay)
+        os.replace(temporary, Path(args.output) / replay_file)
+        saved = checkpoint(net, args, f'selfplay-{time.time_ns()}', stage='selfplay', iteration=iteration,
+                           bootstrap_steps=bootstrap_steps, selfplay_iterations=iteration,
+                           replay_file=replay_file, optimizer=optimizer.state_dict())
         if args.eval_every and iteration % args.eval_every == 0:
             result = arena_games(args, 'greedy', 'solver', args.eval_games, net=net)
             log(args, 'evaluation', iteration=iteration, **result)
+        log(args, 'iteration', iteration=iteration, seconds=time.monotonic() - started,
+            generation_seconds=generation_seconds, games=args.games,
+            games_per_second=args.games / generation_seconds, new_positions=new_positions,
+            replay_positions=len(replay['board']), sample_reuse=args.steps * args.batch_size / new_positions,
+            checkpoint=str(saved),
+            peak_vram_mb=(torch.cuda.max_memory_allocated(args.device) / 2**20
+                          if torch.device(args.device).type == 'cuda' else 0))
 
 
 def wilson(wins, games):
@@ -373,6 +412,8 @@ def parser():
             s.add_argument('--epsilon', type=float, default=0.08)
             s.add_argument('--channels', type=int, default=64)
             s.add_argument('--blocks', type=int, default=4)
+            s.add_argument('--network-size', choices=('small', 'medium'),
+                           help='Architecture preset: small=32x3, medium=64x4; overrides channels/blocks.')
             s.add_argument('--policy-beta', type=float, default=3.)
             s.add_argument('--data')
             s.add_argument('--game-log-every', type=int, default=100)
@@ -387,7 +428,7 @@ def parser():
         if name == 'arena':
             from . import registry
             ids = [entry['id'] for entry in registry.catalog()]
-            default = next(entry['id'] for entry in registry.catalog() if entry.get('request_sims'))
+            default = next((entry['id'] for entry in registry.catalog() if entry.get('request_sims')), 'solver')
             s.add_argument('--agent-a', choices=ids, default=default,
                            help='Catalog identity; --checkpoint overrides its weights for an unrecorded evaluation.')
             s.add_argument('--agent-b', choices=ids, default='solver')
@@ -402,6 +443,10 @@ def main():
         p.error('use a square board with a positive odd mine count smaller than its area (no draws)')
     if args.games < 1 or args.sims < 1 or args.concurrent_games < 1:
         p.error('games, sims, and concurrent-games must be positive')
+    if args.command != 'arena' and (args.steps < 1 or args.batch_size < 1 or args.iterations < 1 or args.log_every < 1):
+        p.error('steps, batch-size, iterations, and log-every must be positive')
+    if args.command == 'selfplay' and (args.replay_size < 1 or args.eval_every < 0 or args.eval_games < 1):
+        p.error('replay-size and eval-games must be positive; eval-every must be nonnegative')
     torch.set_num_threads(args.threads)
     torch.manual_seed(args.seed)
     if torch.cuda.is_available():

@@ -48,32 +48,23 @@ def test_duplicate_derived_ids_rejected(tmp_path, monkeypatch):
 def test_catalog_contains_only_current_agents():
     entries = registry.catalog()
     assert [entry['id'] for entry in entries] == [
-        'random', 'solver', 'r64x4-tr-bs8k.greedy', 'r64x4-tr-bs8k.mcts100-c1.5',
+        'random', 'solver', 'r64x4-bs8k.greedy', 'r32x3-bs8k.greedy', 'r64x4-bs8k.mcts100-c1.5',
     ]
     assert all('rules' not in entry for entry in entries)
     assert all(entry['available'] for entry in entries)
 
 
-def test_transferred_identity_preserves_historical_provenance(tmp_path):
-    source = 'checkpoints/exact/selfplay-historical.pt'
-    path = checkpoint(tmp_path, 'bootstrap', bootstrap_steps=8000,
-                      selfplay_iterations=0, transferred_from=source)
-    entry = registry._neural_entry(path, None)
-    assert entry['id'] == 'r64x4-tr-bs8k.greedy'
-    assert 'rules' not in entry
-    assert registry._provenance(path, torch.load(path, weights_only=False))['transferred_from'] == source
 
 
 def test_detail_exposes_twenty_plane_bomb_board():
-    entry = registry.detail('r64x4-tr-bs8k.greedy')
+    entry = registry.detail('r64x4-bs8k.greedy')
     assert entry['input_planes'] == 20
     assert entry['board']['bombs'] == 1
     assert 'rules' not in entry['board']
     assert 'rules' not in entry['shape']
-    assert entry['provenance']['transferred_from']
 
 
 def test_removed_agent_ids_are_unknown():
-    for agent_id in ('bomb.r64x4-tr-bs8k.greedy', 'r64x4-bs8k.greedy'):
+    for agent_id in ('bomb.r64x4-tr-bs8k.greedy', 'r64x4-tr-bs8k.greedy'):
         with pytest.raises(ValueError, match='unknown agent'):
             registry.create(agent_id)
