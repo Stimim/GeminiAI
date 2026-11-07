@@ -1,0 +1,905 @@
+{
+  "minimum_available_mib": 3355,
+  "samples": [
+    {
+      "time": 1794068504.533436,
+      "available_mib": 5167
+    },
+    {
+      "time": 1794068519.5379305,
+      "available_mib": 5176
+    },
+    {
+      "time": 1794068534.5406034,
+      "available_mib": 4107
+    },
+    {
+      "time": 1794068549.5424151,
+      "available_mib": 4165
+    },
+    {
+      "time": 1794068564.545148,
+      "available_mib": 4175
+    },
+    {
+      "time": 1794068579.5471466,
+      "available_mib": 4176
+    },
+    {
+      "time": 1794068594.5489106,
+      "available_mib": 4174
+    },
+    {
+      "time": 1794068609.5507815,
+      "available_mib": 4184
+    },
+    {
+      "time": 1794068624.5525403,
+      "available_mib": 4182
+    },
+    {
+      "time": 1794068639.5541365,
+      "available_mib": 4133
+    },
+    {
+      "time": 1794068654.5557692,
+      "available_mib": 4153
+    },
+    {
+      "time": 1794068669.5574992,
+      "available_mib": 4149
+    },
+    {
+      "time": 1794068684.5589654,
+      "available_mib": 4144
+    },
+    {
+      "time": 1794068699.5620742,
+      "available_mib": 4044
+    },
+    {
+      "time": 1794068714.5639093,
+      "available_mib": 4004
+    },
+    {
+      "time": 1794068729.5658967,
+      "available_mib": 3985
+    },
+    {
+      "time": 1794068744.5686457,
+      "available_mib": 3983
+    },
+    {
+      "time": 1794068759.5711277,
+      "available_mib": 4003
+    },
+    {
+      "time": 1794068774.5735898,
+      "available_mib": 3972
+    },
+    {
+      "time": 1794068789.575485,
+      "available_mib": 4014
+    },
+    {
+      "time": 1794068804.5770638,
+      "available_mib": 3981
+    },
+    {
+      "time": 1794068819.5787153,
+      "available_mib": 3974
+    },
+    {
+      "time": 1794068834.5804055,
+      "available_mib": 4004
+    },
+    {
+      "time": 1794068849.5820494,
+      "available_mib": 4014
+    },
+    {
+      "time": 1794068864.583954,
+      "available_mib": 3993
+    },
+    {
+      "time": 1794068879.5861983,
+      "available_mib": 3984
+    },
+    {
+      "time": 1794068894.5886579,
+      "available_mib": 3977
+    },
+    {
+      "time": 1794068909.5903988,
+      "available_mib": 3967
+    },
+    {
+      "time": 1794068924.5928886,
+      "available_mib": 3959
+    },
+    {
+      "time": 1794068939.5948915,
+      "available_mib": 3967
+    },
+    {
+      "time": 1794068954.596937,
+      "available_mib": 3952
+    },
+    {
+      "time": 1794068969.598881,
+      "available_mib": 4036
+    },
+    {
+      "time": 1794068984.6005497,
+      "available_mib": 4019
+    },
+    {
+      "time": 1794068999.6022696,
+      "available_mib": 4034
+    },
+    {
+      "time": 1794069014.6040256,
+      "available_mib": 4032
+    },
+    {
+      "time": 1794069029.6058073,
+      "available_mib": 4038
+    },
+    {
+      "time": 1794069044.6073887,
+      "available_mib": 4089
+    },
+    {
+      "time": 1794069059.6113057,
+      "available_mib": 4077
+    },
+    {
+      "time": 1794069074.6131566,
+      "available_mib": 4075
+    },
+    {
+      "time": 1794069089.6150692,
+      "available_mib": 3949
+    },
+    {
+      "time": 1794069104.6175253,
+      "available_mib": 3937
+    },
+    {
+      "time": 1794069119.6228936,
+      "available_mib": 3921
+    },
+    {
+      "time": 1794069134.6259162,
+      "available_mib": 3931
+    },
+    {
+      "time": 1794069149.6283195,
+      "available_mib": 3941
+    },
+    {
+      "time": 1794069164.6302936,
+      "available_mib": 3938
+    },
+    {
+      "time": 1794069179.6323354,
+      "available_mib": 3932
+    },
+    {
+      "time": 1794069194.6346574,
+      "available_mib": 3921
+    },
+    {
+      "time": 1794069209.6374717,
+      "available_mib": 3926
+    },
+    {
+      "time": 1794069224.639072,
+      "available_mib": 3925
+    },
+    {
+      "time": 1794069239.6408617,
+      "available_mib": 3919
+    },
+    {
+      "time": 1794069254.6432219,
+      "available_mib": 3874
+    },
+    {
+      "time": 1794069269.6450152,
+      "available_mib": 3872
+    },
+    {
+      "time": 1794069284.6468244,
+      "available_mib": 3834
+    },
+    {
+      "time": 1794069299.648877,
+      "available_mib": 3837
+    },
+    {
+      "time": 1794069314.6508498,
+      "available_mib": 3832
+    },
+    {
+      "time": 1794069329.6530378,
+      "available_mib": 3854
+    },
+    {
+      "time": 1794069344.6555934,
+      "available_mib": 3845
+    },
+    {
+      "time": 1794069359.657239,
+      "available_mib": 3823
+    },
+    {
+      "time": 1794069374.660766,
+      "available_mib": 3792
+    },
+    {
+      "time": 1794069389.6626384,
+      "available_mib": 3822
+    },
+    {
+      "time": 1794069404.66558,
+      "available_mib": 3377
+    },
+    {
+      "time": 1794069419.667524,
+      "available_mib": 3832
+    },
+    {
+      "time": 1794069434.6692731,
+      "available_mib": 3821
+    },
+    {
+      "time": 1794069449.6723595,
+      "available_mib": 3842
+    },
+    {
+      "time": 1794069464.6746259,
+      "available_mib": 3825
+    },
+    {
+      "time": 1794069479.6767027,
+      "available_mib": 3836
+    },
+    {
+      "time": 1794069494.6783957,
+      "available_mib": 3762
+    },
+    {
+      "time": 1794069509.6803043,
+      "available_mib": 3819
+    },
+    {
+      "time": 1794069524.683928,
+      "available_mib": 3839
+    },
+    {
+      "time": 1794069539.6864789,
+      "available_mib": 3841
+    },
+    {
+      "time": 1794069554.6881135,
+      "available_mib": 3835
+    },
+    {
+      "time": 1794069569.691258,
+      "available_mib": 3818
+    },
+    {
+      "time": 1794069584.6965215,
+      "available_mib": 3820
+    },
+    {
+      "time": 1794069599.6988869,
+      "available_mib": 3816
+    },
+    {
+      "time": 1794069614.700649,
+      "available_mib": 3829
+    },
+    {
+      "time": 1794069629.704718,
+      "available_mib": 3824
+    },
+    {
+      "time": 1794069644.7065573,
+      "available_mib": 3793
+    },
+    {
+      "time": 1794069659.708689,
+      "available_mib": 3765
+    },
+    {
+      "time": 1794069674.7103057,
+      "available_mib": 3822
+    },
+    {
+      "time": 1794069689.7119808,
+      "available_mib": 3816
+    },
+    {
+      "time": 1794069704.7135427,
+      "available_mib": 3570
+    },
+    {
+      "time": 1794069719.7189713,
+      "available_mib": 3806
+    },
+    {
+      "time": 1794069734.7209213,
+      "available_mib": 3837
+    },
+    {
+      "time": 1794069749.7228243,
+      "available_mib": 3838
+    },
+    {
+      "time": 1794069764.7245376,
+      "available_mib": 3367
+    },
+    {
+      "time": 1794069779.7264159,
+      "available_mib": 3819
+    },
+    {
+      "time": 1794069794.7289681,
+      "available_mib": 3840
+    },
+    {
+      "time": 1794069809.7309835,
+      "available_mib": 3830
+    },
+    {
+      "time": 1794069824.732915,
+      "available_mib": 3846
+    },
+    {
+      "time": 1794069839.7348042,
+      "available_mib": 3850
+    },
+    {
+      "time": 1794069854.7364917,
+      "available_mib": 3857
+    },
+    {
+      "time": 1794069869.738082,
+      "available_mib": 3853
+    },
+    {
+      "time": 1794069884.7397294,
+      "available_mib": 3864
+    },
+    {
+      "time": 1794069899.7414303,
+      "available_mib": 3862
+    },
+    {
+      "time": 1794069914.7428994,
+      "available_mib": 3858
+    },
+    {
+      "time": 1794069929.7445407,
+      "available_mib": 3866
+    },
+    {
+      "time": 1794069944.7462213,
+      "available_mib": 3842
+    },
+    {
+      "time": 1794069959.7478733,
+      "available_mib": 3862
+    },
+    {
+      "time": 1794069974.7495344,
+      "available_mib": 3863
+    },
+    {
+      "time": 1794069989.751342,
+      "available_mib": 3843
+    },
+    {
+      "time": 1794070004.753403,
+      "available_mib": 3854
+    },
+    {
+      "time": 1794070019.7557576,
+      "available_mib": 3823
+    },
+    {
+      "time": 1794070034.757651,
+      "available_mib": 3844
+    },
+    {
+      "time": 1794070049.7596629,
+      "available_mib": 3861
+    },
+    {
+      "time": 1794070064.7620747,
+      "available_mib": 3831
+    },
+    {
+      "time": 1794070079.765316,
+      "available_mib": 3802
+    },
+    {
+      "time": 1794070094.770107,
+      "available_mib": 3897
+    },
+    {
+      "time": 1794070109.7720783,
+      "available_mib": 3898
+    },
+    {
+      "time": 1794070124.7737622,
+      "available_mib": 3919
+    },
+    {
+      "time": 1794070139.775698,
+      "available_mib": 3947
+    },
+    {
+      "time": 1794070154.7783022,
+      "available_mib": 3934
+    },
+    {
+      "time": 1794070169.7808325,
+      "available_mib": 3939
+    },
+    {
+      "time": 1794070184.7846422,
+      "available_mib": 3949
+    },
+    {
+      "time": 1794070199.7868807,
+      "available_mib": 3941
+    },
+    {
+      "time": 1794070214.7888796,
+      "available_mib": 3921
+    },
+    {
+      "time": 1794070229.7918134,
+      "available_mib": 3355
+    },
+    {
+      "time": 1794070244.7945392,
+      "available_mib": 3899
+    },
+    {
+      "time": 1794070259.7962658,
+      "available_mib": 3902
+    },
+    {
+      "time": 1794070274.7981312,
+      "available_mib": 3934
+    },
+    {
+      "time": 1794070289.7998753,
+      "available_mib": 3911
+    },
+    {
+      "time": 1794070304.8024786,
+      "available_mib": 3848
+    },
+    {
+      "time": 1794070319.8044083,
+      "available_mib": 3870
+    },
+    {
+      "time": 1794070334.8070436,
+      "available_mib": 3854
+    },
+    {
+      "time": 1794070349.8092692,
+      "available_mib": 3845
+    },
+    {
+      "time": 1794070364.811486,
+      "available_mib": 3884
+    },
+    {
+      "time": 1794070379.813601,
+      "available_mib": 3869
+    },
+    {
+      "time": 1794070394.8155162,
+      "available_mib": 3879
+    },
+    {
+      "time": 1794070409.8188615,
+      "available_mib": 3813
+    },
+    {
+      "time": 1794070424.8256736,
+      "available_mib": 3854
+    },
+    {
+      "time": 1794070439.8299265,
+      "available_mib": 3861
+    },
+    {
+      "time": 1794070454.831771,
+      "available_mib": 3850
+    },
+    {
+      "time": 1794070469.8338387,
+      "available_mib": 3814
+    },
+    {
+      "time": 1794070484.836333,
+      "available_mib": 3771
+    },
+    {
+      "time": 1794070499.838332,
+      "available_mib": 3815
+    },
+    {
+      "time": 1794070514.8423393,
+      "available_mib": 3871
+    },
+    {
+      "time": 1794070529.8439343,
+      "available_mib": 3852
+    },
+    {
+      "time": 1794070544.8467824,
+      "available_mib": 3873
+    },
+    {
+      "time": 1794070559.848808,
+      "available_mib": 3877
+    },
+    {
+      "time": 1794070574.8517084,
+      "available_mib": 3867
+    },
+    {
+      "time": 1794070589.8537338,
+      "available_mib": 3868
+    },
+    {
+      "time": 1794070604.8596265,
+      "available_mib": 3861
+    },
+    {
+      "time": 1794070619.8617094,
+      "available_mib": 3860
+    },
+    {
+      "time": 1794070634.8644114,
+      "available_mib": 3842
+    },
+    {
+      "time": 1794070649.866283,
+      "available_mib": 3844
+    },
+    {
+      "time": 1794070664.8679957,
+      "available_mib": 3847
+    },
+    {
+      "time": 1794070679.8699746,
+      "available_mib": 3854
+    },
+    {
+      "time": 1794070694.872044,
+      "available_mib": 3412
+    },
+    {
+      "time": 1794070709.8737643,
+      "available_mib": 3871
+    },
+    {
+      "time": 1794070724.875377,
+      "available_mib": 3868
+    },
+    {
+      "time": 1794070739.8775024,
+      "available_mib": 3860
+    },
+    {
+      "time": 1794070754.8804145,
+      "available_mib": 3852
+    },
+    {
+      "time": 1794070769.88238,
+      "available_mib": 3500
+    },
+    {
+      "time": 1794070784.8847454,
+      "available_mib": 3858
+    },
+    {
+      "time": 1794070799.88852,
+      "available_mib": 3853
+    },
+    {
+      "time": 1794070814.8903055,
+      "available_mib": 3851
+    },
+    {
+      "time": 1794070829.8920352,
+      "available_mib": 3812
+    },
+    {
+      "time": 1794070844.8936803,
+      "available_mib": 3827
+    },
+    {
+      "time": 1794070859.8956482,
+      "available_mib": 3846
+    },
+    {
+      "time": 1794070874.8977065,
+      "available_mib": 3805
+    },
+    {
+      "time": 1794070889.8997297,
+      "available_mib": 3870
+    },
+    {
+      "time": 1794070904.9020753,
+      "available_mib": 3825
+    },
+    {
+      "time": 1794070919.9041944,
+      "available_mib": 3828
+    },
+    {
+      "time": 1794070934.9099662,
+      "available_mib": 3863
+    },
+    {
+      "time": 1794070949.912763,
+      "available_mib": 3809
+    },
+    {
+      "time": 1794070964.9154282,
+      "available_mib": 3832
+    },
+    {
+      "time": 1794070979.917519,
+      "available_mib": 3834
+    },
+    {
+      "time": 1794070994.9191625,
+      "available_mib": 3820
+    },
+    {
+      "time": 1794071009.9216003,
+      "available_mib": 3867
+    },
+    {
+      "time": 1794071024.9238098,
+      "available_mib": 3856
+    },
+    {
+      "time": 1794071039.9258487,
+      "available_mib": 3855
+    },
+    {
+      "time": 1794071054.9287364,
+      "available_mib": 3864
+    },
+    {
+      "time": 1794071069.9306455,
+      "available_mib": 3838
+    },
+    {
+      "time": 1794071084.93352,
+      "available_mib": 3824
+    },
+    {
+      "time": 1794071099.9353106,
+      "available_mib": 3816
+    },
+    {
+      "time": 1794071114.9372728,
+      "available_mib": 3830
+    },
+    {
+      "time": 1794071129.939893,
+      "available_mib": 3831
+    },
+    {
+      "time": 1794071144.9419045,
+      "available_mib": 3803
+    },
+    {
+      "time": 1794071159.9435742,
+      "available_mib": 3851
+    },
+    {
+      "time": 1794071174.9453242,
+      "available_mib": 3403
+    },
+    {
+      "time": 1794071189.9470658,
+      "available_mib": 3866
+    },
+    {
+      "time": 1794071204.9494252,
+      "available_mib": 3847
+    },
+    {
+      "time": 1794071219.9527862,
+      "available_mib": 3815
+    },
+    {
+      "time": 1794071234.9549904,
+      "available_mib": 3836
+    },
+    {
+      "time": 1794071249.956796,
+      "available_mib": 3817
+    },
+    {
+      "time": 1794071264.9605083,
+      "available_mib": 3826
+    },
+    {
+      "time": 1794071279.9630027,
+      "available_mib": 3793
+    },
+    {
+      "time": 1794071294.9649343,
+      "available_mib": 3819
+    },
+    {
+      "time": 1794071309.9671674,
+      "available_mib": 3830
+    },
+    {
+      "time": 1794071324.9703784,
+      "available_mib": 3827
+    },
+    {
+      "time": 1794071339.9745557,
+      "available_mib": 3853
+    },
+    {
+      "time": 1794071354.9764595,
+      "available_mib": 3850
+    },
+    {
+      "time": 1794071369.9789531,
+      "available_mib": 3785
+    },
+    {
+      "time": 1794071384.9817493,
+      "available_mib": 3815
+    },
+    {
+      "time": 1794071399.984104,
+      "available_mib": 3802
+    },
+    {
+      "time": 1794071414.9885266,
+      "available_mib": 3821
+    },
+    {
+      "time": 1794071429.9904685,
+      "available_mib": 3820
+    },
+    {
+      "time": 1794071444.9924817,
+      "available_mib": 3797
+    },
+    {
+      "time": 1794071459.9948704,
+      "available_mib": 3814
+    },
+    {
+      "time": 1794071474.996645,
+      "available_mib": 3842
+    },
+    {
+      "time": 1794071489.998504,
+      "available_mib": 3863
+    },
+    {
+      "time": 1794071505.0002189,
+      "available_mib": 3842
+    },
+    {
+      "time": 1794071520.004161,
+      "available_mib": 3863
+    },
+    {
+      "time": 1794071535.0060368,
+      "available_mib": 3851
+    },
+    {
+      "time": 1794071550.0087476,
+      "available_mib": 3837
+    },
+    {
+      "time": 1794071565.0104263,
+      "available_mib": 3848
+    },
+    {
+      "time": 1794071580.0121067,
+      "available_mib": 3856
+    },
+    {
+      "time": 1794071595.0140657,
+      "available_mib": 3796
+    },
+    {
+      "time": 1794071610.0162482,
+      "available_mib": 3785
+    },
+    {
+      "time": 1794071625.0183742,
+      "available_mib": 3811
+    },
+    {
+      "time": 1794071640.0206442,
+      "available_mib": 3834
+    },
+    {
+      "time": 1794071655.0260437,
+      "available_mib": 3832
+    },
+    {
+      "time": 1794071670.0300808,
+      "available_mib": 3872
+    },
+    {
+      "time": 1794071685.0319731,
+      "available_mib": 3869
+    },
+    {
+      "time": 1794071700.033705,
+      "available_mib": 3886
+    },
+    {
+      "time": 1794071715.0368514,
+      "available_mib": 3884
+    },
+    {
+      "time": 1794071730.0389168,
+      "available_mib": 3391
+    },
+    {
+      "time": 1794071745.0406878,
+      "available_mib": 7724
+    },
+    {
+      "time": 1794071760.0424175,
+      "available_mib": 7743
+    },
+    {
+      "time": 1794071775.0440607,
+      "available_mib": 7772
+    },
+    {
+      "time": 1794071790.0457785,
+      "available_mib": 7771
+    },
+    {
+      "time": 1794071805.0476184,
+      "available_mib": 7748
+    },
+    {
+      "time": 1794071820.0511715,
+      "available_mib": 7760
+    },
+    {
+      "time": 1794071835.0530517,
+      "available_mib": 7782
+    },
+    {
+      "time": 1794071850.0549312,
+      "available_mib": 7529
+    },
+    {
+      "time": 1794071865.059447,
+      "available_mib": 11409
+    }
+  ]
+}

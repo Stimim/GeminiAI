@@ -167,6 +167,106 @@ Never overwrite, rename or repoint pinned weights: historical results are keyed 
 
 `checkpoints/run-medium/` (64×4) and `checkpoints/run-small/` (32×3) resume existing optimizer, replay, and iteration counters. The output directory's `latest.pt` always takes precedence over `--checkpoint`. `--iterations 0` is open-ended; positive values are total target iteration numbers, not additional iterations. Interrupted unpublished work is regenerated; the command's learning rate overrides the restored optimizer learning rate.
 
+### Auxiliary-target trial: medium g181 → g201
+
+The controlled continuation forks published **g181** into `checkpoints/run-medium`
+(control) and `checkpoints/run-medium-aux` (treatment), with a SHA-256-verified
+independent checkpoint/optimizer/replay snapshot under `checkpoints/aux-start/`.
+`checkpoints/aux-trial.json` records exact argv, PIDs, hashes and memory observations.
+Both arms use lr **2e-4**, value weight **.25**, alpha **.15**, 30 temperature
+moves, PUCT-100/K4/tree reuse, 96 games, 300×128 updates and a 50k replay buffer.
+Each arm has four one-thread CPU workers plus one trainer thread.
+
+The treatment adds two optional training-only heads; search still consumes only
+the original win/loss value. A pooled linear score-margin head predicts final
+`(mover score − opponent score) / win_score` with **MSE weight .10**. A linear
+output avoids clipping bomb wins whose final score can exceed the win threshold.
+A spatial three-logit ownership head predicts **mover / opponent / unclaimed**
+with **cross-entropy weight .05**, averaged over true mines per position. Safe
+cells are masked rather than adding an easy, majority safe class. Terminal
+ownership includes bomb claims and is mover-relative at every historical position.
+Both final layers start at zero; all original weights and optimizer moments are
+retained. The initial full-supervision ownership contribution is `.05 × log(3)`
+(about **.055**), small compared with the policy loss.
+
+`--score-margin-weight` and `--mine-ownership-weight` default to **0**. Heads are
+enabled in `NetConfig` only when requested or retained from an auxiliary checkpoint.
+Legacy replay has masked auxiliary labels, not invented outcomes; its influence
+on auxiliary gradients is zero until replaced. Spatial augmentation transforms
+ownership with the board. Checkpoint-derived architecture keys distinguish each
+head combination: both heads use **`r64x4aso`**, versus control **`r64x4`**.
+No auxiliary category is published unless that treatment wins.
+
+The predeclared comparison uses independent fresh banks of **200 paired-seat
+games** for treatment versus control (greedy and fresh-tree/no-noise
+MCTS-100/K4), and each arm versus frozen g181 (greedy). MCTS strength is primary;
+greedy strength and held-out value diagnostics are guardrails. A positive MCTS
+estimate triggers an independent **400-game** confirmation bank; intervals
+overlapping 50% do not establish a treatment winner. Only the chosen final
+immutable checkpoint is promoted; without a credible difference the control
+is promoted and auxiliary heads remain off by default.
+
+Both arms completed all **20 iterations / 1,920 replay games** and stopped at
+g201. Logged UTC times on **2026-11-07**: launch **16:19:11**; treatment finish
+**17:15:44** (**56m33s**); control finish **17:17:45** (**58m34s**). The exact
+checkpoint hashes, immutable final paths and per-iteration loss/validation
+records are retained under `checkpoints/aux-results/`. The 15-second observer's
+minimum available RAM was **3,355 MiB**, above the 3 GiB floor; both arms
+retained four workers.
+
+| Mean training loss over 20 iterations | Control | Treatment | Treatment weighted contribution |
+|---|---:|---:|---:|
+| Policy CE | 2.094 | 2.036 | 2.036 |
+| Win/loss value MSE | .227 | .215 | .0538 |
+| Mine BCE | .363 | .361 | .7227 |
+| Score-margin MSE | — | .0273 | .00273 |
+| Mine-ownership CE | — | .4527 | .02263 |
+
+The auxiliary contribution totals **.0254**, versus **2.81** from the original
+losses: auxiliary supervision did not dominate optimization. These are replay
+training losses (including zero auxiliary weight for legacy samples), not
+held-out estimates.
+
+| Held-out iteration | Value MSE, control / treatment | Treatment margin MSE | Treatment margin MAE, score points |
+|---|---|---:|---:|
+| 185 | .623 / .500 | .0394 | 3.90 |
+| 190 | .644 / 1.020 | .0519 | 4.85 |
+| 195 | .540 / .803 | .0394 | 4.05 |
+| 200 | .909 / 1.119 | .0500 | 4.26 |
+
+Each validation uses **16 fresh complete self-play games**, never replayed.
+The treatment's lower replay value loss did **not** translate into consistently
+better held-out value estimates. At g200, value sign accuracy was **70.73% /
+65.42%** (control/treatment). Positions within games are correlated and the two
+arms induce different trajectories; these small cohorts are diagnostics, not
+independent-position significance tests.
+
+Each match below uses **100 independent fresh layouts, both seats per layout**;
+95% CIs resample whole layout pairs, not individual games. Comparisons finished
+at **17:32:37 UTC**; MCTS-100/K4 took **848 seconds**. Training used tree reuse;
+the paired MCTS evaluation used fresh trees with no root noise.
+
+| First side versus second | Mode | First-side wins | Win rate [paired 95% CI] | Seed bank |
+|---|---|---:|---|---:|
+| Treatment g201 vs control g201 | Greedy | 94/200 | 47.0% [39.5–54.5%] | 8410000 |
+| Treatment g201 vs control g201 | MCTS-100/K4 | 95/200 | 47.5% [40.5–54.5%] | 8420000 |
+| Treatment g201 vs start g181 | Greedy | 105/200 | 52.5% [46.0–59.0%] | 8430000 |
+| Control g201 vs start g181 | Greedy | 97/200 | 48.5% [42.0–55.5%] | 8440000 |
+
+**Decision: no credible treatment gain; promote control g201.** The primary
+point estimate is below 50%, so the positive-estimate confirmation rule was not
+triggered. Neither a treatment regression nor an improvement over g181 is
+established. Auxiliary heads and CLI flags remain available but **off by
+default**; no auxiliary registry category or architecture diagram is published.
+
+The registry promoted only immutable control final
+`checkpoints/run-medium/selfplay-1794071856720434497.pt`, yielding
+**`r64x4-bs8k-sp201.greedy`** and **`r64x4-bs8k-sp201.mcts100-c1.5`**.
+Treatment final `checkpoints/run-medium-aux/selfplay-1794071732012886762.pt`
+and the independent g181 snapshot remain on disk. All trial processes stopped;
+no subsequent experiment was launched.
+Final verification: `uv run pytest -q` — **201 passed in 29.79s**.
+
 ### Exploration trial: medium g161 → g181
 
 **Outcome: retain control exploration; no credible strength improvement.**

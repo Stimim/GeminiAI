@@ -22,7 +22,7 @@ import torch.nn.functional as F
 from .agents import RandomAgent, SolverAgent
 from .game import Config, Game, UNKNOWN, encode_batch
 from .mcts import Search
-from .model import Evaluator, Net, NetConfig, load, save
+from .model import Evaluator, Net, NetConfig, add_auxiliary_heads, load, save
 from .solver import Analysis
 
 
@@ -35,6 +35,8 @@ class Position:
     mine: np.ndarray
     bombs: list[int]
     value: float = 0.0
+    final_scores: list[int] | None = None
+    ownership: np.ndarray | None = None
 
 
 def dihedral(x: np.ndarray, symmetry: int) -> np.ndarray:
@@ -48,6 +50,44 @@ def augment(x, policy, mine, symmetry):
     return (dihedral(x, symmetry).copy(),
             dihedral(policy.reshape(-1, h, w), symmetry).reshape(policy.shape).copy(),
             dihedral(mine.reshape(-1, h, w), symmetry).reshape(mine.shape).copy())
+
+
+def finish_targets(positions, game):
+    """Label terminal outcomes, preserving the mover perspective at each position."""
+    for p in positions:
+        p.value = 1. if p.player == game.winner else -1.
+        p.final_scores = list(game.scores)
+        ownership = np.full(game.cfg.n, -1, np.int8)
+        ownership[game.mines] = 2  # unclaimed mines, not safe cells
+        ownership[game.board == 9 + p.player] = 0
+        ownership[game.board == 9 + (1 - p.player)] = 1
+        p.ownership = ownership
+
+
+def legacy_auxiliary_targets(data):
+    """Legacy samples carry no auxiliary supervision, never fabricated labels."""
+    n, cells = data['board'].shape
+    if 'final_scores' not in data:
+        data['final_scores'] = np.full((n, 2), -1, np.int16)
+    if 'ownership' not in data:
+        data['ownership'] = np.full((n, cells), -1, np.int8)
+    return data
+
+
+def auxiliary_losses(pred_margin, pred_ownership, final_scores, player, ownership, win_score):
+    """Masked means retain the missing-sample fraction in mixed legacy batches."""
+    zero = final_scores.float().sum() * 0
+    margin_loss = ownership_loss = zero
+    valid = (final_scores >= 0).all(1)
+    if pred_margin is not None:
+        rows = torch.arange(len(player), device=player.device)
+        target = (final_scores[rows, player] - final_scores[rows, 1 - player]).float() / win_score
+        margin_loss = (F.mse_loss(pred_margin.float(), target, reduction='none') * valid).mean()
+    if pred_ownership is not None:
+        per_cell = F.cross_entropy(pred_ownership.float(), ownership.long(), ignore_index=-1, reduction='none')
+        counts = (ownership >= 0).sum(1).clamp_min(1)
+        ownership_loss = (per_cell.sum(1) / counts).mean()
+    return margin_loss, ownership_loss
 
 
 def bootstrap_game(job):
@@ -69,8 +109,7 @@ def bootstrap_game(job):
         legal = g.legal_actions()
         action = rng.choice(legal if rng.random() < epsilon else best)
         g.step(int(action))
-    for p in positions:
-        p.value = 1. if p.player == g.winner else -1.
+    finish_targets(positions, g)
     return positions
 
 
@@ -81,7 +120,11 @@ def pack(positions, cfg):
                 player=np.array([p.player for p in positions], np.int8),
                 policy=np.stack([p.policy for p in positions]).astype(np.float32),
                 mine=np.stack([p.mine for p in positions]).astype(np.float32),
-                value=np.array([p.value for p in positions], np.float32))
+                value=np.array([p.value for p in positions], np.float32),
+                final_scores=np.array([p.final_scores if p.final_scores is not None else [-1, -1]
+                                       for p in positions], np.int16),
+                ownership=np.stack([p.ownership if p.ownership is not None else
+                                    np.full(cfg.n, -1, np.int8) for p in positions]))
 
 
 def log(args, event, **fields):
@@ -124,30 +167,46 @@ def fit(net, data, args, steps, optimizer=None):
         states = list(zip(data['board'][part], data['scores'][part], data['player'][part], availability[part]))
         x[part] = encode_batch(states, cfg)
     net.train()
-    total = np.zeros(3)
+    total = np.zeros(5)
     for step in range(1, steps + 1):
         ids = rng.integers(n, size=args.batch_size)
-        xb, pi, mine = augment(x[ids], data['policy'][ids], data['mine'][ids], int(rng.integers(8)))
+        symmetry = int(rng.integers(8))
+        xb, pi, mine = augment(x[ids], data['policy'][ids], data['mine'][ids], symmetry)
         xb = torch.as_tensor(xb, device=args.device, dtype=torch.float32)
         pi = torch.as_tensor(pi, device=args.device)
         mine = torch.as_tensor(mine, device=args.device)
         value = torch.as_tensor(data['value'][ids], device=args.device)
         with torch.autocast(device_type=torch.device(args.device).type, dtype=torch.bfloat16,
                             enabled=torch.device(args.device).type == 'cuda'):
-            logits, pred_value, pred_mine = net(xb)
+            logits, pred_value, pred_mine, pred_margin, pred_ownership = net(xb, auxiliary=True)
             policy_loss = -(pi * F.log_softmax(logits.float(), 1)).sum(1).mean()
             value_loss = F.mse_loss(pred_value.float(), value)
             mask = xb[:, 0].flatten(1)
             mine_loss = (F.binary_cross_entropy_with_logits(pred_mine.float(), mine, reduction='none') * mask).sum() / mask.sum()
-            loss = policy_loss + args.value_weight * value_loss + args.mine_weight * mine_loss
+            margin_loss = ownership_loss = value_loss.new_zeros(())
+            if pred_margin is not None or pred_ownership is not None:
+                labels = legacy_auxiliary_targets(data)
+                ownership = dihedral(labels['ownership'][ids].reshape(-1, cfg.h, cfg.w), symmetry).reshape(-1, cfg.n).copy()
+                margin_loss, ownership_loss = auxiliary_losses(
+                    pred_margin, pred_ownership,
+                    torch.as_tensor(labels['final_scores'][ids], device=args.device),
+                    torch.as_tensor(data['player'][ids], device=args.device, dtype=torch.long),
+                    torch.as_tensor(ownership, device=args.device), cfg.win_score)
+            loss = (policy_loss + args.value_weight * value_loss + args.mine_weight * mine_loss
+                    + getattr(args, 'score_margin_weight', 0.) * margin_loss
+                    + getattr(args, 'mine_ownership_weight', 0.) * ownership_loss)
         optimizer.zero_grad(set_to_none=True)
         loss.backward()
         optimizer.step()
-        total += [policy_loss.item(), value_loss.item(), mine_loss.item()]
+        total += [policy_loss.item(), value_loss.item(), mine_loss.item(), margin_loss.item(), ownership_loss.item()]
         if step % args.log_every == 0 or step == steps:
             denom = args.log_every if step % args.log_every == 0 else step % args.log_every
             log(args, 'train', step=step, policy_loss=total[0]/denom, value_loss=total[1]/denom,
-                mine_loss=total[2]/denom, steps_per_second=step/(time.monotonic()-start))
+                mine_loss=total[2]/denom, score_margin_loss=total[3]/denom,
+                mine_ownership_loss=total[4]/denom,
+                weighted_score_margin_loss=getattr(args, 'score_margin_weight', 0.) * total[3]/denom,
+                weighted_mine_ownership_loss=getattr(args, 'mine_ownership_weight', 0.) * total[4]/denom,
+                steps_per_second=step/(time.monotonic()-start))
             total[:] = 0
     net.eval()
     return optimizer
@@ -157,12 +216,15 @@ def new_or_load(args, required=False):
     path = Path(args.checkpoint or str(Path(args.output) / 'latest.pt'))
     if path.exists():
         net = load(str(path), args.device)[0]
-        return net
+        return add_auxiliary_heads(net, score_margin=getattr(args, 'score_margin_weight', 0.) > 0,
+                                   mine_ownership=getattr(args, 'mine_ownership_weight', 0.) > 0)
     if required or args.checkpoint:
         raise FileNotFoundError(path)
     preset = getattr(args, 'network_size', None)
     channels, blocks = {'small': (32, 3), 'medium': (64, 4)}[preset] if preset else (args.channels, args.blocks)
-    return Net(NetConfig(channels, blocks, args.policy_beta)).to(args.device)
+    return Net(NetConfig(channels, blocks, args.policy_beta,
+                         score_margin=getattr(args, 'score_margin_weight', 0.) > 0,
+                         mine_ownership=getattr(args, 'mine_ownership_weight', 0.) > 0)).to(args.device)
 
 
 def bootstrap(args):
@@ -260,8 +322,7 @@ def selfplay_batch(args, evaluator, seed):
         active = next_active
     positions = []
     for g, history in zip(games, histories):
-        for p in history:
-            p.value = 1. if p.player == g.winner else -1.
+        finish_targets(history, g)
         positions.extend(history)
     log(args, 'selfplay_games', games=len(games), positions=len(positions),
         games_per_second=len(games)/(time.monotonic()-start),
@@ -405,6 +466,7 @@ def validate_value(args, evaluator, seed):
     data = selfplay_games(validation_args, evaluator, seed)
     generation_seconds = time.monotonic() - started
     predictions = []
+    margin_predictions = []
     cfg = Config(args.size, args.size, args.mines)
     for offset in range(0, len(data['board']), 128):
         part = slice(offset, offset + 128)
@@ -412,6 +474,11 @@ def validate_value(args, evaluator, seed):
                           data['player'][part], data['bombs'][part]))
         _, values, _ = evaluator(states, cfg)
         predictions.append(values)
+        if getattr(getattr(getattr(evaluator, 'net', None), 'cfg', None), 'score_margin', False):
+            with torch.inference_mode():
+                inputs = torch.as_tensor(encode_batch(states, cfg), device=evaluator.device)
+                predicted = evaluator.net(inputs, auxiliary=True)[3]
+                margin_predictions.append(predicted.float().cpu().numpy())
     values = np.concatenate(predictions)
     target = data['value']
     rows = np.arange(len(target))
@@ -426,6 +493,13 @@ def validate_value(args, evaluator, seed):
                               positions=int(mask.sum()),
                               mse=float(np.mean((values[mask] - target[mask]) ** 2)),
                               accuracy=float(np.mean((values[mask] > 0) == (target[mask] > 0)))))
+    margin_diagnostics = {}
+    if margin_predictions:
+        predicted_margin = np.concatenate(margin_predictions)
+        final_margin = (data['final_scores'][rows, data['player']] -
+                        data['final_scores'][rows, 1 - data['player']]) / cfg.win_score
+        margin_diagnostics = dict(score_margin_mse=float(np.mean((predicted_margin - final_margin) ** 2)),
+                                  score_margin_mae_points=float(np.mean(np.abs(predicted_margin - final_margin)) * cfg.win_score))
     log(args, 'value_validation', games=validation_args.games, positions=len(target),
         seed=seed, policy='selfplay', replay_inserted=False,
         mse=float(np.mean((values - target) ** 2)),
@@ -434,7 +508,7 @@ def validate_value(args, evaluator, seed):
         accuracy=float(np.mean((values > 0) == (target > 0))),
         prediction_mean=float(values.mean()), target_mean=float(target.mean()),
         score_bands=bands, generation_seconds=generation_seconds,
-        seconds=time.monotonic() - started)
+        seconds=time.monotonic() - started, **margin_diagnostics)
 
 
 DISK_LIMIT_BYTES = 100_000_000_000
@@ -515,18 +589,33 @@ def selfplay(args):
     source = latest if latest.exists() else Path(args.checkpoint or latest)
     args.checkpoint = str(source)
     net, prior = load(source, args.device)
+    original_parameters = list(net.parameters())
+    net = add_auxiliary_heads(net, score_margin=args.score_margin_weight > 0,
+                              mine_ownership=args.mine_ownership_weight > 0)
     from .registry import training_counts
     bootstrap_steps, previous_iterations = training_counts(source, prior)
-    optimizer = torch.optim.AdamW(net.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+    # Load the original optimizer before appending new head parameters: old moments
+    # remain bit-identical and newly introduced parameters start without moments.
+    optimizer = torch.optim.AdamW(original_parameters, lr=args.lr, weight_decay=args.weight_decay)
     if 'optimizer' in prior:
         optimizer.load_state_dict(prior['optimizer'])
         for group in optimizer.param_groups:
             group['lr'] = args.lr
+    original_ids = {id(p) for p in original_parameters}
+    if any(id(p) not in original_ids for p in net.parameters()):
+        # Upgrading reconstructs modules, so map the restored moments by parameter order.
+        old_state = optimizer.state_dict()
+        new_parameters = list(net.parameters())
+        optimizer = torch.optim.AdamW(new_parameters[:len(original_parameters)], lr=args.lr,
+                                      weight_decay=args.weight_decay)
+        optimizer.load_state_dict(old_state)
+        optimizer.param_groups[0]['params'].extend(new_parameters[len(original_parameters):])
     replay = None
     replay_path = Path(args.output) / prior.get('replay_file', 'replay.npz')
     if replay_path.exists():
         with np.load(replay_path) as stored:
             replay = {k: stored[k][-args.replay_size:].copy() for k in stored.files}
+        legacy_auxiliary_targets(replay)
     elif prior.get('replay_file'):
         raise FileNotFoundError(f'checkpoint replay buffer missing: {replay_path}')
     log(args, 'resume', checkpoint=str(source), completed_iterations=previous_iterations,
@@ -727,6 +816,8 @@ def parser():
             s.add_argument('--mine-weight', type=float, default=2.)
             s.add_argument('--value-weight', type=float, default=0.25)
             s.add_argument('--log-every', type=int, default=100)
+            s.add_argument('--score-margin-weight', type=float, default=0.)
+            s.add_argument('--mine-ownership-weight', type=float, default=0.)
         if name == 'bootstrap':
             s.add_argument('--workers', type=int, default=min(12, os.cpu_count() or 1))
             s.add_argument('--epsilon', type=float, default=0.08)

@@ -84,6 +84,12 @@ def training_counts(path, checkpoint):
     return bootstrap, selfplay
 
 
+def architecture_key(shape):
+    base = f"r{shape['channels']}x{shape['blocks']}"
+    suffix = ('s' if shape.get('score_margin') else '') + ('o' if shape.get('mine_ownership') else '')
+    return base + ('a' + suffix if suffix else '')
+
+
 def _neural_entry(checkpoint, search, *, shape=None, training=None):
     path = Path(checkpoint)
     if shape is None or training is None:
@@ -95,7 +101,7 @@ def _neural_entry(checkpoint, search, *, shape=None, training=None):
                 _identities[key] = (ck['net_cfg'], counts)
             shape, training = _identities[key]
     bootstrap = format(training['bootstrap'] / 1000, 'g') + 'k'
-    arch = f"r{shape['channels']}x{shape['blocks']}"
+    arch = architecture_key(shape)
     trained = f'bs{bootstrap}'
     description = f'{bootstrap} bootstrap'
     if training['selfplay']:
@@ -134,7 +140,7 @@ def entries():
     paths = set()
     for architecture, spec in data.items():
         shape = spec['shape']
-        if architecture != f"r{shape['channels']}x{shape['blocks']}":
+        if architecture != architecture_key(shape):
             raise ValueError(f'Architecture mismatch: {architecture}')
         for record in spec['generations']:
             path = str(Path(record['checkpoint']).resolve())
@@ -317,7 +323,7 @@ def promote(checkpoint):
     # Use the real loader: inspecting net_cfg alone misses incompatible weights.
     _, ck = load(str(path), 'cpu')
     shape = {key: value for key, value in ck['net_cfg'].items() if key != 'rules'}
-    architecture = f"r{shape['channels']}x{shape['blocks']}"
+    architecture = architecture_key(shape)
     if architecture not in data:
         raise ValueError(f'Unsupported architecture: {architecture}')
     training = dict(zip(('bootstrap', 'selfplay'), training_counts(path, ck)))

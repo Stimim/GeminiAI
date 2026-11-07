@@ -1,4 +1,4 @@
-"""Fully-convolutional residual network with three heads.
+"""Fully-convolutional residual network with optional auxiliary training heads.
 
 - mine head:   per-cell logit of P(mine | public board). Trained supervised
                (exact solver marginals / true layout), no RL needed.
@@ -8,6 +8,10 @@
                mine totals with a learned scale and residual; both action types
                are normalised jointly.
 - value head:  global-pooled -> tanh, expected outcome for the player to move.
+- optional score-margin head: pooled -> linear, normalized final score difference.
+- optional ownership head: three logits per cell, supervised only on true mines.
+
+The ordinary forward path and search evaluator omit auxiliary outputs entirely.
 
 Being fully convolutional with global pooling, the same weights run on any
 board size.
@@ -33,6 +37,8 @@ class NetConfig:
     planes: int = NUM_PLANES
     policy_gamma: float = 3.0
     bomb_threshold: float = 3.0
+    score_margin: bool = False
+    mine_ownership: bool = False
 
     def __post_init__(self):
         if self.planes != NUM_PLANES:
@@ -70,9 +76,17 @@ class Net(nn.Module):
         nn.init.zeros_(self.bomb_res[-1].bias)
         self.gamma = nn.Parameter(torch.tensor(cfg.policy_gamma))
         self.value = nn.Sequential(nn.Linear(2 * c, 64), nn.ReLU(), nn.Linear(64, 1))
+        if cfg.score_margin:
+            self.score_margin = nn.Sequential(nn.Linear(2 * c, 64), nn.ReLU(), nn.Linear(64, 1))
+            nn.init.zeros_(self.score_margin[-1].weight)
+            nn.init.zeros_(self.score_margin[-1].bias)
+        if cfg.mine_ownership:
+            self.mine_ownership = nn.Sequential(nn.Conv2d(c, 32, 1), nn.ReLU(), nn.Conv2d(32, 3, 1))
+            nn.init.zeros_(self.mine_ownership[-1].weight)
+            nn.init.zeros_(self.mine_ownership[-1].bias)
 
-    def forward(self, x: torch.Tensor):
-        """Return joint action logits [B,2N], value [B], and mine logits [B,N]."""
+    def forward(self, x: torch.Tensor, *, auxiliary: bool = False):
+        """Return search outputs; optionally append margin and ownership predictions."""
         f = self.body(self.stem(x))
         mine = self.mine(f).flatten(1)
         policy = self.beta * mine + self.policy_res(f).flatten(1)
@@ -91,6 +105,10 @@ class Net(nn.Module):
         board = x[:, 17:18]  # ones on the board
         pooled = torch.cat([(f * board).sum((2, 3)) / board.sum((2, 3)), f.amax((2, 3))], 1)
         value = torch.tanh(self.value(pooled)).squeeze(1)
+        if auxiliary:
+            margin = self.score_margin(pooled).squeeze(1) if self.cfg.score_margin else None
+            ownership = self.mine_ownership(f).flatten(2) if self.cfg.mine_ownership else None
+            return policy, value, mine, margin, ownership
         return policy, value, mine
 
 
@@ -107,6 +125,21 @@ def load(path: str, device: str | torch.device = "cpu") -> tuple[Net, dict]:
     net.load_state_dict(ck["state"])
     net.eval()
     return net, ck
+
+
+def add_auxiliary_heads(net: Net, *, score_margin: bool = False, mine_ownership: bool = False) -> Net:
+    """Copy existing outputs exactly while initializing only newly enabled heads."""
+    config = asdict(net.cfg)
+    config["score_margin"] |= score_margin
+    config["mine_ownership"] |= mine_ownership
+    if config == asdict(net.cfg):
+        return net
+    upgraded = Net(NetConfig(**config)).to(next(net.parameters()).device)
+    missing, unexpected = upgraded.load_state_dict(net.state_dict(), strict=False)
+    if unexpected or any(not key.startswith(("score_margin.", "mine_ownership.")) for key in missing):
+        raise ValueError("auxiliary upgrade changed existing network parameters")
+    upgraded.train(net.training)
+    return upgraded
 
 
 class Evaluator:
