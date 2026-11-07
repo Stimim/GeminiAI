@@ -97,18 +97,22 @@ class MCTSAgent(Agent):
 
     name = "mcts"
 
-    def __init__(self, evaluator: Evaluator, sims: int = 200, rng: np.random.Generator | None = None, **search_kw):
+    def __init__(self, evaluator: Evaluator, sims: int = 200, rng: np.random.Generator | None = None,
+                 leaf_batch_size: int = 1, tree_reuse: bool = True, **search_kw):
         self.ev = evaluator
         self.sims = sims
         self.rng = rng or np.random.default_rng()
+        self.leaf_batch_size = leaf_batch_size
+        self.tree_reuse = tree_reuse
         self.search_kw = search_kw
         self.last: Search | None = None
 
     def search(self, pub: PublicState) -> Search:
-        s = Search(pub, self.sims, rng=self.rng, **self.search_kw)
-        while (leaf := s.next_leaf()) is not None:
-            policy, value, _ = self.ev([leaf], pub.cfg)
-            s.provide(policy[0], float(value[0]))
+        root = self.last.matching_root(pub) if self.tree_reuse and self.last is not None else None
+        s = Search(pub, self.sims, rng=self.rng, root=root, **self.search_kw)
+        while (leaves := s.next_leaves(self.leaf_batch_size)):
+            policy, value, _ = self.ev(leaves, pub.cfg)
+            s.provide_batch(policy, value)
         self.last = s
         return s
 
@@ -119,7 +123,7 @@ class MCTSAgent(Agent):
         s = self.last if self.last is not None and self.last.pub is pub else self.search(pub)
         _, value, mine = self.ev([(pub.board, pub.scores, pub.to_move, pub.bombs)], pub.cfg)
         root = s.root
-        policy = s.visit_policy()
+        policy = s.improved_policy()
         q = np.zeros_like(policy)
         q[root.actions] = np.where(root.N > 0, root.W / np.maximum(root.N, 1), 0.0)
         return {

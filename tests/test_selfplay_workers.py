@@ -22,3 +22,28 @@ def test_spawned_workers_merge_the_same_seeded_batches(tmp_path):
     assert actual.keys() == expected.keys()
     for key in expected:
         np.testing.assert_allclose(actual[key], expected[key], atol=1e-6)
+
+
+def test_cpu_share_reserves_trainer_and_splits_workers(tmp_path, monkeypatch):
+    import sys
+    from msflags import train
+    observed = []
+    monkeypatch.setattr(sys, 'argv', ['train', 'selfplay', '--workers', '6',
+                                    '--cpu-share', '13', '--output', str(tmp_path)])
+    monkeypatch.setattr(train, 'selfplay', lambda args: observed.append(args))
+    monkeypatch.setattr(train, 'log', lambda *args, **kwargs: None)
+    train.main()
+    assert observed[0].threads == 1
+    assert observed[0].worker_threads == 2
+    assert observed[0].threads + observed[0].workers * observed[0].worker_threads == 13
+
+
+def test_cpu_share_rejects_oversubscribed_workers(tmp_path, monkeypatch):
+    import sys
+    import pytest
+    from msflags import train
+    monkeypatch.setattr(sys, 'argv', ['train', 'selfplay', '--workers', '6',
+                                    '--cpu-share', '6', '--output', str(tmp_path)])
+    with pytest.raises(SystemExit) as error:
+        train.main()
+    assert error.value.code == 2

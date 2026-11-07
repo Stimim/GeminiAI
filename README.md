@@ -8,6 +8,58 @@ A two-player Minesweeper game and AI playground. Players alternate opening cells
 - **ResNet evaluator:** fully convolutional mine, open-policy, bomb-policy, and value heads, using 20 public-information input planes. Open policy is `beta * mine_logit + residual(features)`; the bomb head starts from clipped 5×5 expected mine counts. Open and bomb actions share a masked softmax over `2 × board cells`.
 - **Information-set MCTS:** searches from public information, sampling consistent determinizations with the constraint solver.
 
+### Search controls
+
+`MCTSAgent` reuses only descendants matching the observed public board, scores,
+player and bomb inventory; unseen opponent extra turns can traverse several
+levels. A missing outcome starts a fresh tree. No sampled mine layout is retained.
+Offline arena and paired comparisons use the same reuse rule.
+
+`Search(..., search="puct"|"gumbel", sims=100, gumbel_k=16)` supports ordinary
+PUCT and Gumbel-top-k root sampling with budgeted sequential halving. Each
+halving round gives surviving candidates equal visits before eliminating half.
+The candidate count is reduced when necessary to fit every halving round in the
+budget. As before, a fresh root evaluation counts as one simulation; a reused
+expanded root spends the whole budget on edges. Gumbel's final action maximizes
+the surviving candidates' Gumbel + log-prior + completed-Q score, without another
+random draw. `improved_policy()` returns the legal masked softmax of log-prior
+plus `(50 + max_visits) * completed_Q`; unvisited actions use the prior-weighted
+visited-value / network-value mixture from [Danihelka et al. (ICLR 2022)](https://iclr.cc/virtual/2022/poster/6418).
+Non-root selection remains PUCT: it already averages sampled chance outcomes
+and preserves the existing player-relative backup/extra-turn handling, isolating
+the root-allocation change rather than changing two selection algorithms at once.
+Open and bomb actions share the same masked action distribution.
+
+`next_leaves(K)` / `provide_batch(policies, values)` reserve independent pending
+leaves with virtual visits and loss. Reservations live in separate counters,
+so completion reverts virtual loss exactly without modifying real sums.
+Duplicate unexpanded public outcomes end a batch; root expansion and halving
+boundaries are evaluation barriers. `K=1` preserves sequential PUCT behavior.
+`MCTSAgent(..., leaf_batch_size=4, tree_reuse=True)` controls play batching;
+self-play and compare accept `--leaf-batch-size`, `--search` (compare: `--mode`)
+and `--gumbel-k`. Self-play stores the completed-Q target for Gumbel, visit targets
+for PUCT. Registry categories and published web identities are unchanged.
+
+Compare independently configured sides with `--mode-b`, `--sims-b`,
+`--leaf-batch-size-b` and `--no-tree-reuse-b` (a fresh-tree baseline).
+The result includes paired-layout bootstrap intervals and each side's total
+search/inference seconds divided by its move count. Concurrent-game timings
+are amortized throughput costs, not single-game interactive latency.
+
+Self-play accepts `--workers 4 --cpu-share 5` or explicit `--threads 1
+--worker-threads 1`. `--cpu-share` reserves one trainer thread and splits the
+remaining threads evenly among spawned workers; it rejects budgets too small
+to give every process one thread. Across N runs on a 20-thread machine, allocate
+at most `floor(20/N)` threads per run (including its trainer), subtracting other
+active workloads first. Four simultaneous runs can therefore use four workers
+plus a trainer each only if no additional CPU workload needs a share; six workers
+need at least seven threads per run. More workers than concurrent game batches
+cannot help. This is a thread budget, not CPU affinity or an OS scheduling quota.
+
+Training retention measures the configured disk root globally but deletes only
+obsolete checkpoints within that run's own `--output` directory. Benchmark output
+belongs under `/tmp` or `checkpoints/dev-*/`; it must not prune live run directories.
+
 ## Setup
 
 ```sh

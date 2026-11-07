@@ -192,22 +192,24 @@ def bootstrap(args):
                    bootstrap_steps=args.steps * epoch, selfplay_iterations=0)
 
 
-def run_searches(searches, evaluator, cfg):
-    """One leaf per live search per GPU batch, until every budget is exhausted."""
+def run_searches(searches, evaluator, cfg, leaf_batch_size=1):
+    """Batch multiple virtual-loss-diversified leaves from every live search."""
     active = list(searches)
     while active:
         pending, leaves = [], []
         for s in active:
-            leaf = s.next_leaf()
-            if leaf is not None:
-                pending.append(s)
-                leaves.append(leaf)
+            batch = s.next_leaves(leaf_batch_size)
+            if batch:
+                pending.append((s, len(batch)))
+                leaves.extend(batch)
         if not pending:
             break
         policies, values, _ = evaluator(leaves, cfg)
-        for s, pi, v in zip(pending, policies, values):
-            s.provide(pi, float(v))
-        active = pending
+        offset = 0
+        for s, count in pending:
+            s.provide_batch(policies[offset:offset + count], values[offset:offset + count])
+            offset += count
+        active = [s for s, _ in pending]
 
 
 def selfplay_batch(args, evaluator, seed):
@@ -224,12 +226,14 @@ def selfplay_batch(args, evaluator, seed):
         searches = [Search(games[i].public(), args.sims, rng=rng, root=roots[i],
                            c_puct=args.c_puct, fpu_reduction=args.fpu_reduction,
                            dirichlet_alpha=args.dirichlet_alpha,
-                           dirichlet_frac=args.dirichlet_frac) for i in active]
-        run_searches(searches, evaluator, cfg)
+                           dirichlet_frac=args.dirichlet_frac,
+                           search=getattr(args, 'search', 'puct'),
+                           gumbel_k=getattr(args, 'gumbel_k', 16)) for i in active]
+        run_searches(searches, evaluator, cfg, getattr(args, 'leaf_batch_size', 1))
         next_active = []
         for i, s in zip(active, searches):
             g = games[i]
-            pi = s.visit_policy().astype(np.float32)
+            pi = s.improved_policy().astype(np.float32)
             histories[i].append(Position(g.board.copy(), list(g.scores), g.to_move, pi,
                                          s.analysis.probs.astype(np.float32), bombs=list(g.bombs)))
             if moves[i] < args.temperature_moves and args.temperature > 0:
@@ -355,9 +359,10 @@ def disk_bytes(root):
     return total
 
 
-def prune_checkpoints(root='checkpoints', dry_run=False, limit=DISK_LIMIT_BYTES):
-    """Only obsolete immutable self-play weights are eligible for deletion."""
+def prune_checkpoints(root='checkpoints', dry_run=False, limit=DISK_LIMIT_BYTES, *, output=None):
+    """Measure root globally, but training may delete only inside its own output."""
     root = Path(root)
+    deletion_root = Path(output).resolve() if output is not None else root.resolve()
     before = disk_bytes(root)
     project_root = Path.cwd() if root.resolve().is_relative_to(Path.cwd()) else root
     project_usage = disk_bytes(project_root)
@@ -369,13 +374,15 @@ def prune_checkpoints(root='checkpoints', dry_run=False, limit=DISK_LIMIT_BYTES)
                     deleted=[], over_budget=max(before, project_usage) > limit)
     pinned = {Path(path).resolve() for path in pinned_checkpoints()}
     deleted = []
-    for directory, _, files in os.walk(root):
+    for directory, _, files in os.walk(deletion_root):
         directory = Path(directory)
         candidates = []
         for name in files:
             if not (name.startswith('selfplay-') and name.endswith('.pt')):
                 continue
             path = directory / name
+            if not path.resolve().is_relative_to(deletion_root):
+                continue
             try:
                 metadata = torch.load(path, map_location='cpu', weights_only=False)
                 iteration = metadata.get('selfplay_iterations', metadata.get('iteration'))
@@ -425,7 +432,7 @@ def selfplay(args):
         raise FileNotFoundError(f'checkpoint replay buffer missing: {replay_path}')
     log(args, 'resume', checkpoint=str(source), completed_iterations=previous_iterations,
         replay_positions=0 if replay is None else len(replay['board']))
-    initial_retention = prune_checkpoints(args.disk_root)
+    initial_retention = prune_checkpoints(args.disk_root, output=args.output)
     log(args, 'retention', **initial_retention)
     if initial_retention['over_budget']:
         return
@@ -488,7 +495,7 @@ def selfplay(args):
             checkpoint=str(saved),
             peak_vram_mb=(torch.cuda.max_memory_allocated(args.device) / 2**20
                           if torch.device(args.device).type == 'cuda' else 0))
-        retention = prune_checkpoints(args.disk_root)
+        retention = prune_checkpoints(args.disk_root, output=args.output)
         log(args, 'retention', **retention)
         if retention['over_budget'] or stop_requested:
             break
@@ -531,6 +538,7 @@ def arena_games(args, first, second, count, net=None):
     for offset in range(0, count, args.concurrent_games):
         ids = list(range(offset, min(count, offset+args.concurrent_games)))
         games = [Game.random(cfg, rng) for _ in ids]
+        previous = [[None] * len(games) for _ in range(2)]
         active = list(range(len(games)))
         while active:
             actions = {}
@@ -547,9 +555,18 @@ def arena_games(args, first, second, count, net=None):
                     settings = entries[side]['settings']
                     override = args.checkpoint if side == 0 else getattr(args, 'checkpoint_b', None)
                     if override:
-                        settings = dict(sims=args.sims, c_puct=args.c_puct, fpu_reduction=args.fpu_reduction)
-                    searches = [Search(games[i].public(), rng=rng, **settings) for i in selected]
-                    run_searches(searches, evaluators[side], cfg)
+                        settings = dict(sims=args.sims, c_puct=args.c_puct, fpu_reduction=args.fpu_reduction,
+                                        search=getattr(args, 'search', 'puct'),
+                                        gumbel_k=getattr(args, 'gumbel_k', 16))
+                    searches = []
+                    for i in selected:
+                        pub = games[i].public()
+                        old = previous[side][i]
+                        root = old.matching_root(pub) if old is not None else None
+                        search = Search(pub, rng=rng, root=root, **settings)
+                        searches.append(search)
+                        previous[side][i] = search
+                    run_searches(searches, evaluators[side], cfg, getattr(args, 'leaf_batch_size', 1))
                     actions.update({i: s.best_action() for i, s in zip(selected, searches)})
             remaining = []
             for i in active:
@@ -588,6 +605,9 @@ def parser():
         s.add_argument('--sims', type=int, default=100)
         s.add_argument('--c-puct', type=float, default=1.5)
         s.add_argument('--fpu-reduction', type=float, default=0.2)
+        s.add_argument('--search', choices=('puct', 'gumbel'), default='puct')
+        s.add_argument('--gumbel-k', type=int, default=16)
+        s.add_argument('--leaf-batch-size', type=int, default=1)
         s.add_argument('--concurrent-games', type=int, default=32)
         if name != 'arena':
             s.add_argument('--iterations', type=int, default=1 if name == 'bootstrap' else 10)
@@ -611,6 +631,8 @@ def parser():
         if name == 'selfplay':
             s.add_argument('--workers', type=int, default=1, help='Independent spawned self-play processes.')
             s.add_argument('--worker-threads', type=int, default=1)
+            s.add_argument('--cpu-share', type=int,
+                           help='Total CPU thread budget for trainer plus spawned workers.')
             s.add_argument('--disk-root', default='checkpoints')
             s.add_argument('--replay-size', type=int, default=100000)
             s.add_argument('--dirichlet-alpha', type=float, default=0.15)
@@ -644,6 +666,17 @@ def main():
         p.error('use a square board with a positive odd mine count smaller than its area (no draws)')
     if args.games < 1 or args.sims < 1 or args.concurrent_games < 1:
         p.error('games, sims, and concurrent-games must be positive')
+    if args.leaf_batch_size < 1 or args.gumbel_k < 1:
+        p.error('leaf-batch-size and gumbel-k must be positive')
+    if args.command == 'selfplay' and args.cpu_share is not None:
+        minimum = args.workers + 1 if args.workers > 1 else 1
+        if args.cpu_share < minimum:
+            p.error('cpu-share must cover one thread per worker plus the trainer')
+        if args.workers > 1:
+            args.threads = 1
+            args.worker_threads = (args.cpu_share - 1) // args.workers
+        else:
+            args.threads = args.cpu_share
     if args.command != 'arena' and (args.steps < 1 or args.batch_size < 1 or args.iterations < 0 or args.log_every < 1):
         p.error('steps, batch-size, and log-every must be positive; iterations must be nonnegative')
     if args.command == 'bootstrap' and args.iterations == 0:
