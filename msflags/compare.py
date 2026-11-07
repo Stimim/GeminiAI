@@ -17,7 +17,7 @@ from .train import run_searches
 def paired_games(evaluators, cfg, *, games, seed, mode='mcts', sims=100,
                  c_puct=1.5, fpu_reduction=0.2, concurrent_games=16,
                  mode_b=None, sims_b=None, gumbel_k=16, leaf_batch_size=1,
-                 tree_reuse=True, tree_reuse_b=None, leaf_batch_size_b=None):
+                 tree_reuse=True, tree_reuse_b=None, leaf_batch_size_b=None, gumbel_noise=False):
     if games < 2 or games % 2:
         raise ValueError('games must be positive and even (two seats per layout)')
     modes = [mode, mode if mode_b is None else mode_b]
@@ -59,7 +59,7 @@ def paired_games(evaluators, cfg, *, games, seed, mode='mcts', sims=100,
                         search = Search(pub, budgets[side], rng=rngs[side][i], root=root,
                                         c_puct=c_puct, fpu_reduction=fpu_reduction,
                                         search='gumbel' if modes[side] == 'gumbel' else 'puct',
-                                        gumbel_k=gumbel_k)
+                                        gumbel_k=gumbel_k, gumbel_noise=gumbel_noise)
                         searches.append(search)
                         previous[side][i] = search
                     run_searches(searches, evaluator, cfg, batches[side])
@@ -81,6 +81,7 @@ def paired_games(evaluators, cfg, *, games, seed, mode='mcts', sims=100,
                 pair_sweeps=int((pairs == 1).sum()), pair_splits=int((pairs == .5).sum()),
                 pair_losses=int((pairs == 0).sum()), seed=seed, mode=mode, mode_b=modes[1],
                 sims=sims if mode != 'greedy' else 0, sims_b=budgets[1], c_puct=c_puct,
+                gumbel_noise=gumbel_noise,
                 fpu_reduction=fpu_reduction, leaf_batch_size=batches, tree_reuse=reuse,
                 moves=move_counts, side_seconds=side_seconds,
                 mean_seconds_per_move=[s / max(1, n) for s, n in zip(side_seconds, move_counts)],
@@ -102,6 +103,7 @@ def main():
     parser.add_argument('--leaf-batch-size-b', type=int)
     parser.add_argument('--tree-reuse', action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument('--tree-reuse-b', action=argparse.BooleanOptionalAction, default=None)
+    parser.add_argument('--gumbel-noise', action=argparse.BooleanOptionalAction, default=False)
     parser.add_argument('--c-puct', type=float, default=1.5)
     parser.add_argument('--fpu-reduction', type=float, default=.2)
     parser.add_argument('--concurrent-games', type=int, default=16)

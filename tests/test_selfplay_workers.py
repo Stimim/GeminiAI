@@ -14,11 +14,16 @@ def test_spawned_workers_merge_the_same_seeded_batches(tmp_path):
         '--output', str(tmp_path), '--workers', '2'])
     evaluator = Evaluator(Net(NetConfig(channels=8, blocks=1)), 'cpu')
     expected = selfplay_games(args, evaluator, 123)
-    with ProcessPoolExecutor(max_workers=2, mp_context=multiprocessing.get_context('spawn'),
+    context = multiprocessing.get_context('spawn')
+    requests = context.Queue()
+    with ProcessPoolExecutor(max_workers=2, mp_context=context,
                              initializer=_init_selfplay_worker,
-                             initargs=(evaluator.net.cfg, 'cpu', 1)) as pool:
+                             initargs=(requests, 1)) as pool:
         evaluator.selfplay_pool = pool
+        evaluator.selfplay_requests = requests
         actual = selfplay_games(args, evaluator, 123)
+    requests.close()
+    requests.join_thread()
     assert actual.keys() == expected.keys()
     for key in expected:
         np.testing.assert_allclose(actual[key], expected[key], atol=1e-6)
@@ -47,3 +52,26 @@ def test_cpu_share_rejects_oversubscribed_workers(tmp_path, monkeypatch):
     with pytest.raises(SystemExit) as error:
         train.main()
     assert error.value.code == 2
+
+
+def test_shared_evaluator_failure_releases_every_worker(tmp_path):
+    import pytest
+    args = parser().parse_args([
+        'selfplay', '--device', 'cpu', '--size', '3', '--mines', '3',
+        '--games', '4', '--concurrent-games', '1', '--sims', '2',
+        '--output', str(tmp_path), '--workers', '2'])
+    context = multiprocessing.get_context('spawn')
+    requests = context.Queue()
+
+    def fail(states, cfg):
+        raise RuntimeError('deliberate inference failure')
+
+    with ProcessPoolExecutor(max_workers=2, mp_context=context,
+                             initializer=_init_selfplay_worker,
+                             initargs=(requests, 1)) as pool:
+        fail.selfplay_pool = pool
+        fail.selfplay_requests = requests
+        with pytest.raises(RuntimeError, match='deliberate inference failure'):
+            selfplay_games(args, fail, 123)
+    requests.close()
+    requests.join_thread()

@@ -59,6 +59,9 @@ class Search:
         root: Node | None = None,
         search: str = "puct",
         gumbel_k: int = 16,
+        gumbel_noise: bool = True,
+        gumbel_c_visit: float = 50.0,
+        gumbel_c_scale: float = 0.1,
     ):
         self.pub = pub
         if search not in ("puct", "gumbel"):
@@ -67,6 +70,9 @@ class Search:
             raise ValueError("sims and gumbel_k must be positive")
         self.search = search
         self.gumbel_k = gumbel_k
+        self.gumbel_noise = gumbel_noise
+        self.gumbel_c_visit = gumbel_c_visit
+        self.gumbel_c_scale = gumbel_c_scale
         self._batch = []
         self._g_candidates = None
         self._g_schedule = []
@@ -243,7 +249,10 @@ class Search:
         mass = r.prior[visited].sum()
         mean = float(np.dot(r.prior[visited], q[visited]) / mass) if mass > 0 else r.value
         mixed = (r.value + r.N.sum() * mean) / (1 + r.N.sum())
-        return (50.0 + r.N.max(initial=0)) * np.where(visited, q, mixed)
+        completed = np.where(visited, q, mixed)
+        spread = completed.max() - completed.min()
+        normalized = (completed - completed.min()) / max(spread, 1e-8)
+        return (self.gumbel_c_visit + r.N.max(initial=0)) * self.gumbel_c_scale * normalized
 
     def _g_scores(self) -> np.ndarray:
         return self._g_noise + np.log(np.maximum(self.root.prior, 1e-300)) + self._sigma_q()
@@ -251,7 +260,7 @@ class Search:
     def _init_gumbel(self) -> None:
         if self._g_candidates is not None:
             return
-        self._g_noise = self.rng.gumbel(size=len(self.root.actions))
+        self._g_noise = self.rng.gumbel(size=len(self.root.actions)) if self.gumbel_noise else np.zeros(len(self.root.actions))
         # Root expansion consumes one simulation, as it does in PUCT.
         budget = max(1, self.sims - self.done_sims)
         k = min(self.gumbel_k, len(self.root.actions), budget)

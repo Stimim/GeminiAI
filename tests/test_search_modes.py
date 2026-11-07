@@ -165,3 +165,50 @@ def test_reuse_and_search_are_invariant_to_unobserved_real_mines():
     observed = first.public()
     assert searches[0].matching_root(observed) is searches[0].root
     assert searches[1].matching_root(observed) is searches[1].root
+
+
+def test_noise_free_single_candidate_single_simulation_is_exactly_greedy():
+    g = game()
+    policy = np.arange(1, 2 * g.cfg.n + 1, dtype=float)
+    policy /= policy.sum()
+    s = Search(g.public(), 1, search='gumbel', gumbel_k=1, gumbel_noise=False,
+               rng=np.random.default_rng(99))
+    assert s.next_leaf() is not None
+    s.provide(policy, .3)
+    assert s.best_action() == int(policy.argmax())
+    np.testing.assert_allclose(s.improved_policy(), policy)
+    np.testing.assert_array_equal(s._g_noise, np.zeros_like(s._g_noise))
+
+
+@pytest.mark.parametrize('player', [0, 1])
+@pytest.mark.parametrize('action', [0, 1, 9])
+def test_gumbel_completed_q_is_in_root_mover_perspective(player, action):
+    g = game()
+    g.to_move = player
+    s = Search(g.public(), 2, search='gumbel', gumbel_k=1, gumbel_noise=False)
+    s.analysis.sample = lambda rng: g.mines
+    policy = np.zeros(2 * g.cfg.n)
+    policy[action] = 1.
+    s.next_leaf()
+    s.provide(policy, 0.)
+    leaf = s.next_leaf()
+    assert leaf is not None
+    s.provide(np.ones(2 * g.cfg.n), .6)
+    i = int(np.flatnonzero(s.root.actions == action)[0])
+    assert s.root.N[i] == 1
+    assert s.root.W[i] == pytest.approx(.6 if action == 0 else -.6)
+
+
+def test_completed_q_mixture_normalization_and_sigma_constants():
+    g = game()
+    s = Search(g.public(), 4, search='gumbel', gumbel_noise=False)
+    s.next_leaf()
+    s.provide(np.ones(2 * g.cfg.n), .2)
+    s.root.N[:2] = [2, 1]
+    s.root.W[:2] = [1., -.5]
+    # Visited Q=.5,-.5; prior-weighted mean=0; mixed value=(.2+3*0)/4=.05.
+    # Range [-.5,.5] maps to [0,1]; unvisited normalized Q=.55.
+    sigma = s._sigma_q()
+    assert sigma[0] == pytest.approx(5.2)  # (50 + max_visits=2) * .1
+    assert sigma[1] == 0
+    np.testing.assert_allclose(sigma[2:], 5.2 * .55)

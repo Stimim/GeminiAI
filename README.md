@@ -23,8 +23,17 @@ budget. As before, a fresh root evaluation counts as one simulation; a reused
 expanded root spends the whole budget on edges. Gumbel's final action maximizes
 the surviving candidates' Gumbel + log-prior + completed-Q score, without another
 random draw. `improved_policy()` returns the legal masked softmax of log-prior
-plus `(50 + max_visits) * completed_Q`; unvisited actions use the prior-weighted
-visited-value / network-value mixture from [Danihelka et al. (ICLR 2022)](https://iclr.cc/virtual/2022/poster/6418).
+plus `(50 + max_visits) * 0.1 * normalized_completed_Q`; completed values are
+min-max normalized to [0,1] (a constant range maps to zero). Unvisited actions
+use the prior-weighted visited-value / network-value mixture from
+[Danihelka et al. (ICLR 2022)](https://iclr.cc/virtual/2022/poster/6418).
+`gumbel_c_visit=50` and `gumbel_c_scale=0.1` match the reference Mctx transform.
+Q is accumulated in each node's mover perspective, so the root's completed Q
+already has the root player's sign, including mine extra turns and bomb passes.
+Play/arena and compare disable Gumbel noise by default (`gumbel_noise=False`);
+self-play enables it. `--gumbel-noise` / `--no-gumbel-noise` explicitly select
+sampling or deterministic top-k. With noise off, one candidate and one simulation
+exactly reproduce the greedy policy action.
 Non-root selection remains PUCT: it already averages sampled chance outcomes
 and preserves the existing player-relative backup/extra-turn handling, isolating
 the root-allocation change rather than changing two selection algorithms at once.
@@ -39,6 +48,12 @@ boundaries are evaluation barriers. `K=1` preserves sequential PUCT behavior.
 self-play and compare accept `--leaf-batch-size`, `--search` (compare: `--mode`)
 and `--gumbel-k`. Self-play stores the completed-Q target for Gumbel, visit targets
 for PUCT. Registry categories and published web identities are unchanged.
+
+For example, an unrecorded fresh-layout comparison against the pre-reuse baseline:
+
+```sh
+uv run python -m msflags.compare --checkpoint-a checkpoints/run-medium/selfplay-1794006042719861991.pt --checkpoint-b checkpoints/run-medium/selfplay-1794006042719861991.pt --mode gumbel --sims 32 --mode-b puct --sims-b 100 --no-tree-reuse-b --leaf-batch-size 1 --games 200 --seed 940000 --threads 1
+```
 
 Compare independently configured sides with `--mode-b`, `--sims-b`,
 `--leaf-batch-size-b` and `--no-tree-reuse-b` (a fresh-tree baseline).
@@ -55,6 +70,15 @@ active workloads first. Four simultaneous runs can therefore use four workers
 plus a trainer each only if no additional CPU workload needs a share; six workers
 need at least seven threads per run. More workers than concurrent game batches
 cannot help. This is a thread budget, not CPU affinity or an OS scheduling quota.
+
+Spawned workers keep CPU search state only. Their leaf requests are coalesced in
+the trainer process, which owns the sole network/GPU context; inference is split
+into at most 64 leaves per call to bound activation memory. Weights therefore
+cannot go stale between training iterations, and adding workers no longer
+duplicates CUDA contexts or model state. Worker requests and inference failures
+are resolved before pool shutdown; Linux workers are killed if their parent dies.
+Before large benchmark pools, check `free -m`; retain at least 3 GiB available
+memory, and close each pool before starting the next configuration.
 
 Training retention measures the configured disk root globally but deletes only
 obsolete checkpoints within that run's own `--output` directory. Benchmark output

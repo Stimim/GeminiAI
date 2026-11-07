@@ -105,6 +105,7 @@ class MCTSAgent(Agent):
         self.leaf_batch_size = leaf_batch_size
         self.tree_reuse = tree_reuse
         self.search_kw = search_kw
+        self.search_kw.setdefault("gumbel_noise", False)  # deterministic play; self-play keeps exploration
         self.last: Search | None = None
 
     def search(self, pub: PublicState) -> Search:
