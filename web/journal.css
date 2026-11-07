@@ -1,0 +1,51 @@
+.journal-workspace{max-width:1120px!important}
+.journal-heading{max-width:760px;margin:8px 0 28px}
+.journal-heading h1{font-size:clamp(36px,5vw,58px);letter-spacing:-2px;margin-bottom:20px}
+.journal-note{border-left:3px solid var(--teal);background:#e7efed;padding:16px 20px;margin-bottom:30px;color:#35544d;font-size:14px;max-width:850px}
+.journal-note strong{display:block;color:var(--teal);margin-bottom:4px}
+.journal-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px;list-style:none;padding:0;margin:0}
+.journal-card{display:flex;flex-direction:column;min-width:0;padding:24px}
+.journal-card h2{font-size:23px;letter-spacing:-.5px;margin-bottom:14px;line-height:1.25}
+.journal-card h2 a{color:var(--ink);text-decoration:none}
+.journal-card h2 a:hover{text-decoration:underline;text-decoration-thickness:1px}
+.journal-card .eyebrow{font-size:10px;margin-bottom:14px}
+.journal-meta{display:flex;flex-wrap:wrap;gap:5px 15px;font-size:12px;color:var(--muted);margin-bottom:16px}
+.journal-meta span{white-space:nowrap}
+.journal-teaser{font-size:14px;color:var(--muted);margin-bottom:22px}
+.chapter-link{font-size:13px;margin-top:auto;padding-top:8px}
+.journal-source{max-width:780px;font-size:12px;color:var(--muted);margin:26px 0 0}
+#journal-reader{max-width:840px;margin:auto}
+.journal-article{padding:clamp(22px,5vw,58px)}
+.article-heading{border-bottom:1px solid var(--line);padding-bottom:28px;margin-bottom:30px}
+.article-heading h1{font-size:clamp(30px,4vw,44px);line-height:1.16;margin-bottom:20px}
+.article-heading .journal-meta{font-size:13px}
+.article-heading .lede{font-size:16px;line-height:1.65}
+.article-body{font-size:17px;line-height:1.85;overflow-wrap:anywhere}
+.article-body p{margin:0 0 22px}
+.article-body .article-intro{font-size:20px;line-height:1.6;color:#38536c}
+.article-body h2{font-size:24px;line-height:1.3;letter-spacing:-.5px;margin:36px 0 16px}
+.article-body code{font-size:.85em;background:#edf2f7;padding:2px 5px;border-radius:4px}
+.article-body figure{margin:30px 0;background:#f5f8fb;border:1px solid var(--line);border-radius:12px;padding:16px}
+.article-body svg{display:block;width:100%;height:auto;font:14px system-ui,sans-serif;fill:var(--ink)}
+.article-body figcaption{font-size:12px;line-height:1.65;color:var(--muted);margin-top:12px}
+.diagram-node{fill:white;stroke:#b7c7d9;stroke-width:1.5}
+.diagram-mine{fill:#e9f5ef;stroke:#89b9aa;stroke-width:1.5}
+.diagram-edge{fill:none;stroke:var(--blue);stroke-width:2}
+.diagram-teal{stroke:var(--teal)}
+.diagram-small{font-size:12px;fill:var(--muted)}
+.chart-grid{fill:none;stroke:var(--line);stroke-width:1}
+.chart-medium,.chart-small{fill:none;stroke-width:3;stroke-linejoin:round}
+.chart-medium{stroke:var(--blue)}
+.chart-small{stroke:var(--teal);stroke-dasharray:7 5}
+.chart-dot-medium{fill:var(--blue)}
+.chart-dot-small{fill:var(--teal)}
+.chart-label-medium{fill:var(--blue);font-size:12px;font-weight:650}
+.chart-label-small{fill:var(--teal);font-size:12px;font-weight:650}
+.chapter-navigation{display:grid;grid-template-columns:1fr 1fr;gap:20px;border-top:1px solid var(--line);padding-top:26px;margin-top:36px}
+.chapter-navigation a{display:flex;flex-direction:column;gap:6px;text-decoration:none;font-size:15px;border-radius:6px;padding:8px}
+.chapter-navigation a:hover{background:#edf3fa}
+.chapter-navigation a:last-child{text-align:right}
+.chapter-navigation .eyebrow{font-size:10px;margin:0}
+#article-status:empty{display:none}
+@media(max-width:950px){.journal-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:560px){.journal-grid{grid-template-columns:1fr;gap:16px}.journal-heading h1{letter-spacing:-1.3px}.journal-card{padding:22px}.journal-article{padding:23px 19px}.article-body{font-size:16px;line-height:1.8}.article-body .article-intro{font-size:18px}.article-body h2{font-size:22px}.article-body figure{padding:8px;margin:26px -6px}.article-heading .lede{font-size:15px}.chapter-navigation{gap:12px}.chapter-navigation a{font-size:13px;padding:4px}.article-heading{padding-bottom:22px}.journal-note{padding:14px 16px}.journal-heading{margin-top:0}}

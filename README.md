@@ -126,6 +126,8 @@ The reset archived **100** retired-agent games and retained **21** solver/random
 
 Run the server with `uv run python -m msflags.server` and open http://127.0.0.1:8000. Neural catalog entries use pinned timestamped checkpoints; random and solver need no weights. Use `--host`, `--port`, and `--device cpu|cuda` to configure it. The interface supports human-vs-AI, AI-vs-AI, and hot-seat games, with hints and move-by-move animation.
 
+The [Journal](http://127.0.0.1:8000/journal.html) tells the project's development story in nine educational chapters, with hash-linked article reading, static diagrams, and milestone Elo results. Articles live as repository-owned HTML fragments in `web/journal/`; the reader, styling, and index require no build step or external libraries.
+
 ### AI catalog and arena
 
 The catalog has six categories: Random, Greedy exact solver, and ResNet 64×4 / 32×3 with either Greedy policy or MCTS-100 (c 1.5). Each neural category has immutable checkpoint generations; both search modes of an architecture share its pinned generation list. Generation 0 is bootstrap; generation k is completed self-play iteration k. Category IDs (`r64x4.greedy`, `r64x4.mcts100-c1.5`, `r32x3.greedy`, `r32x3.mcts100-c1.5`) select the latest available generation. Baselines have one generation each. Category detail shows architecture, search settings, training summaries and generation ratings; generation detail retains full checkpoint provenance.

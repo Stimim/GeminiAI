@@ -40,6 +40,12 @@ def test_catalog_ratings_are_per_generation_not_category():
     assert "games" not in entry["generations"][0]
 
 
+def test_journal_page_serves_static_reader():
+    response = server.journal_page()
+    assert response.path == server.WEB / "journal.html"
+    assert response.path.is_file()
+
+
 def test_hint_budget_overrides_game_budget(monkeypatch):
     session = SimpleNamespace(game=SimpleNamespace(public=lambda: "public"), sims=100, lock=server.threading.RLock())
     monkeypatch.setattr(server, "get_session", lambda game_id: session)

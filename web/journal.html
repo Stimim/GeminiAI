@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Journal · Minesweeper Flags</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath fill='%2324569c' d='M7 3h3v26H7zM10 4h16l-5 7 5 7H10z'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/arena.css">
+  <link rel="stylesheet" href="/static/journal.css">
+  <script src="/static/journal.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="site-header"><a class="brand" href="/">Minesweeper <span>Flags</span></a><nav aria-label="Main navigation"><a href="/">Play</a><a href="/agents.html">AIs</a><a href="/arena.html">Arena</a><a href="/journal.html" aria-current="page">Journal</a></nav></header>
+  <main id="content" class="workspace journal-workspace">
+    <section id="journal-index" aria-labelledby="journal-title">
+      <div class="journal-heading"><p class="eyebrow">Field notes · November 6–8, 2026</p><h1 id="journal-title" tabindex="-1">A board full of questions.</h1><p class="lede">Building an AlphaZero-style player for Minesweeper Flags: exact counting, educated guesses, a few explosions, and an honest plateau.</p></div>
+      <aside class="journal-note"><strong>Nine chapters. No victory lap.</strong> A human user directed a director agent and workers. These are the ideas, experiments, and mistakes along the way. Read in order, or follow your curiosity.</aside>
+      <ol class="journal-grid">
+        <li class="surface journal-card" data-file="01-board-is-lying.html"><p class="eyebrow">01 · The premise</p><h2><a href="#board-is-lying">The board is lying to you</a></h2><p class="journal-meta"><time datetime="2026-11-06">November 6, 2026</time><span>4 min read</span></p><p class="journal-teaser">A 51×51 misunderstanding, mines as prizes, and why hidden information changes the AlphaZero recipe.</p><a class="text-link chapter-link" href="#board-is-lying">Read chapter 01 →</a></li>
+        <li class="surface journal-card" data-file="02-counting-mines.html"><p class="eyebrow">02 · Exact inference</p><h2><a href="#counting-mines">Counting mines exactly</a></h2><p class="journal-meta"><time datetime="2026-11-06">November 6, 2026</time><span>4 min read</span></p><p class="journal-teaser">Clues become equations. Components become counts. The global mine total gets the final word.</p><a class="text-link chapter-link" href="#counting-mines">Read chapter 02 →</a></li>
+        <li class="surface journal-card" data-file="03-programming-weights.html"><p class="eyebrow">03 · A useful head start</p><h2><a href="#programming-weights">Programming weights instead of learning them</a></h2><p class="journal-meta"><time datetime="2026-11-06">November 6, 2026</time><span>4 min read</span></p><p class="journal-teaser">What we could hand-program, what still needed training, and why a zero-initialized layer was useful.</p><a class="text-link chapter-link" href="#programming-weights">Read chapter 03 →</a></li>
+        <li class="surface journal-card" data-file="04-playing-both-seats.html"><p class="eyebrow">04 · The learning loop</p><h2><a href="#playing-both-seats">Teaching a network to play both seats</a></h2><p class="journal-meta"><time datetime="2026-11-07">November 7, 2026</time><span>4 min read</span></p><p class="journal-teaser">A practical tour of self-play, information-set MCTS, policy targets, and the danger of alternating signs.</p><a class="text-link chapter-link" href="#playing-both-seats">Read chapter 04 →</a></li>
+        <li class="surface journal-card" data-file="05-keeping-score.html"><p class="eyebrow">05 · Evidence and identity</p><h2><a href="#keeping-score">Keeping score without fooling ourselves</a></h2><p class="journal-meta"><time datetime="2026-11-07">November 7, 2026</time><span>4 min read</span></p><p class="journal-teaser">Why the solver is 1000 Elo, perfect records need a prior, and a generation is not a moving category.</p><a class="text-link chapter-link" href="#keeping-score">Read chapter 05 →</a></li>
+        <li class="surface journal-card" data-file="06-kaboom.html"><p class="eyebrow">06 · A rule change</p><h2><a href="#kaboom">Kaboom: one button, 256 new choices</a></h2><p class="journal-meta"><time datetime="2026-11-07">November 7, 2026</time><span>4 min read</span></p><p class="journal-teaser">One bomb each. A joint action distribution. Another programmed head, followed by a clean training reset.</p><a class="text-link chapter-link" href="#kaboom">Read chapter 06 →</a></li>
+        <li class="surface journal-card" data-file="07-faster-with-a-stopwatch.html"><p class="eyebrow">07 · Performance</p><h2><a href="#faster-with-a-stopwatch">Faster, with a stopwatch</a></h2><p class="journal-meta"><time datetime="2026-11-08">November 8, 2026</time><span>4 min read</span></p><p class="journal-teaser">The one-microsecond question, batched leaves, shared GPU ownership, and a quieter Python benchmark.</p><a class="text-link chapter-link" href="#faster-with-a-stopwatch">Read chapter 07 →</a></li>
+        <li class="surface journal-card" data-file="08-the-plateau.html"><p class="eyebrow">08 · The investigation</p><h2><a href="#the-plateau">The plateau detective story</a></h2><p class="journal-meta"><time datetime="2026-11-08">November 8, 2026</time><span>4 min read</span></p><p class="journal-teaser">A real Elo chart, controlled trials, an implausible Gumbel result, and the conclusion the matches support.</p><a class="text-link chapter-link" href="#the-plateau">Read chapter 08 →</a></li>
+        <li class="surface journal-card" data-file="09-commit-early.html"><p class="eyebrow">09 · The outtakes</p><h2><a href="#commit-early">Commit early. Then count your workers.</a></h2><p class="journal-meta"><time datetime="2026-11-08">November 8, 2026</time><span>4 min read</span></p><p class="journal-teaser">An emptied script, a fraction below one, overreaching retention, and the run that stopped talking.</p><a class="text-link chapter-link" href="#commit-early">Read chapter 09 →</a></li>
+      </ol>
+      <p class="journal-source">Based on the project’s development record and measured experiments. Dates group the story; chapter order follows the ideas, not every individual edit.</p>
+    </section>
+    <section id="journal-reader" hidden aria-labelledby="article-title">
+      <a href="#" class="back-link">← All chapters</a>
+      <article class="surface journal-article">
+        <header class="article-heading"><p id="article-number" class="eyebrow"></p><h1 id="article-title" tabindex="-1"></h1><p id="article-meta" class="journal-meta"></p><p id="article-teaser" class="lede"></p></header>
+        <p id="article-status" role="status" aria-live="polite"></p>
+        <div id="article-body" class="article-body"></div>
+        <nav id="chapter-navigation" class="chapter-navigation" aria-label="Article navigation"></nav>
+      </article>
+    </section>
+    <noscript><p class="notice">The article reader needs JavaScript. Read the static chapters directly: <a href="/static/journal/01-board-is-lying.html">1. The board</a> · <a href="/static/journal/02-counting-mines.html">2. Counting</a> · <a href="/static/journal/03-programming-weights.html">3. Weights</a> · <a href="/static/journal/04-playing-both-seats.html">4. Self-play</a> · <a href="/static/journal/05-keeping-score.html">5. Elo</a> · <a href="/static/journal/06-kaboom.html">6. Bombs</a> · <a href="/static/journal/07-faster-with-a-stopwatch.html">7. Speed</a> · <a href="/static/journal/08-the-plateau.html">8. Plateau</a> · <a href="/static/journal/09-commit-early.html">9. Lessons</a>.</p></noscript>
+  </main>
+  <footer class="site-footer">Minesweeper Flags <span aria-hidden="true">·</span> Claim mines. Keep the turn. Question the results.</footer>
+</body>
+</html>

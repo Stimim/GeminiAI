@@ -113,6 +113,10 @@ def agents_page(): return FileResponse(WEB / "agents.html")
 def arena_page(): return FileResponse(WEB / "arena.html")
 
 
+@app.get("/journal.html")
+def journal_page(): return FileResponse(WEB / "journal.html")
+
+
 class NewMatch(BaseModel):
     a: str
     b: str
