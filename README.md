@@ -165,6 +165,99 @@ Never overwrite, rename or repoint pinned weights: historical results are keyed 
 
 `checkpoints/run-medium/` (64×4) and `checkpoints/run-small/` (32×3) resume existing optimizer, replay, and iteration counters. The output directory's `latest.pt` always takes precedence over `--checkpoint`. `--iterations 0` is open-ended; positive values are total target iteration numbers, not additional iterations. Interrupted unpublished work is regenerated; the command's learning rate overrides the restored optimizer learning rate.
 
+### Round 3: active control continuations
+
+The completed trial decision keeps both controls: medium resumes **g113** with
+lr **2e-4**, small resumes **g82** with lr **1e-3**; both use value weight **0.25**.
+Those immutable finals remain promoted. The losing value/LR forks stay stopped.
+The historical trial/round-2 sections below are records of earlier launches,
+not the current process configuration.
+
+Round 3 runs from main under regular **Python 3.14.4**, open-ended
+(`--iterations 0`), using PUCT-100, K=4, tree reuse, and a **single parent GPU
+evaluator per run**. Each run has **four CPU-only workers plus one trainer
+thread** (`--cpu-share 5`): ten budgeted CPU threads across both runs, below the
+twenty-thread host limit and below ten per run. This is a conservative,
+memory-first split, not permission to duplicate GPU models in the workers.
+Each iteration retains 96 games / 16 concurrent per task, c=1.5/FPU=.2,
+Dirichlet alpha=.15/fraction=.25, temperature 1 for 30 moves, 300 updates ×128,
+50,000-position replay, mine weight 2, and each control's original seed.
+Optimizer, replay and counters resume from that directory's `latest.pt`.
+Retention is enabled and deletion is scoped to that run's output directory.
+
+Current detached process groups: **medium 1805211**, **small 1805222**; the
+authoritative IDs are in each `train.pid`. Exact argv, source revision,
+starting iteration and pre-launch metrics are in `checkpoints/round3-launch.json`.
+**Do not execute these launch commands again while the groups are active.**
+
+```sh
+setsid nohup uv run python -m msflags.train selfplay \
+  --output checkpoints/run-medium --iterations 0 --games 96 --concurrent-games 16 \
+  --workers 4 --worker-threads 1 --cpu-share 5 --threads 1 \
+  --search puct --sims 100 --leaf-batch-size 4 --c-puct 1.5 --fpu-reduction .2 \
+  --steps 300 --batch-size 128 --replay-size 50000 --lr .0002 --value-weight .25 --mine-weight 2 \
+  --eval-every 5 --eval-games 100 --value-validation-every 5 --value-validation-games 16 \
+  --seed 610000 --device cuda --disk-root checkpoints \
+  >> checkpoints/run-medium/train.log 2>&1 &
+echo $! > checkpoints/run-medium/train.pid
+
+setsid nohup uv run python -m msflags.train selfplay \
+  --output checkpoints/run-small --iterations 0 --games 96 --concurrent-games 16 \
+  --workers 4 --worker-threads 1 --cpu-share 5 --threads 1 \
+  --search puct --sims 100 --leaf-batch-size 4 --c-puct 1.5 --fpu-reduction .2 \
+  --steps 300 --batch-size 128 --replay-size 50000 --lr .001 --value-weight .25 --mine-weight 2 \
+  --eval-every 5 --eval-games 100 --value-validation-every 5 --value-validation-games 16 \
+  --seed 620000 --device cuda --disk-root checkpoints \
+  >> checkpoints/run-small/train.log 2>&1 &
+echo $! > checkpoints/run-small/train.pid
+```
+
+Monitor logs and available RAM:
+
+```sh
+tail -F checkpoints/run-medium/train.log checkpoints/run-small/train.log
+free -m
+```
+
+Graceful stop (wait for final iteration/checkpoint and process-group exit before
+restarting either directory):
+
+```sh
+kill -TERM -- -"$(cat checkpoints/run-medium/train.pid)"
+kill -TERM -- -"$(cat checkpoints/run-small/train.pid)"
+```
+
+
+#### First completed round-3 iterations
+
+Both resume events confirmed the expected control counters (**113 / 82**) and
+**50,000 replay positions** each. Both completed and published one new iteration,
+including their scoped retention event, and both detached process groups remained
+alive for the open-ended continuation.
+
+| Run | First iteration | New positions | Generation / train / save seconds | Positions/s | Previous final-control positions/s |
+|---|---:|---:|---:|---:|---:|
+| medium | 114 | 8,075 | 150.73 / 7.01 / .179 | **53.57** | 13.13 |
+| small | 83 | 10,998 | 228.74 / 6.90 / .160 | **48.08** | 14.38 |
+
+Total first-iteration wall times were **158.37s / 236.18s**. These rates exceed
+the earlier ~15–30 positions/s range; against the exact final pre-restart control
+records they are **4.08× / 3.34×**. The historical records had different contention,
+so these are end-to-end pipeline/resource gains, not an isolated Python speedup.
+
+Available RAM: **11,717 MiB before launch**, **5,749 MiB after both resumes and
+worker startup**, **5,076 MiB after medium114**, **4,677 MiB after small83**.
+The one-second observer's sampled minimum was **4,216 MiB**, above the required
+3 GiB floor; no safety stop was triggered. Each run retains four workers rather
+than expanding both to six and spending that RAM margin.
+
+First-iteration records and memory observations:
+`checkpoints/round3-first-iterations.json`, also copied into
+`checkpoints/dev-python314-round3-1794044881330994265/`.
+The development worktree was removed only after unlinking its `checkpoints`
+symlink; its fully merged branch was deleted, and the real main-checkout control
+checkpoints were preserved.
+
 ### Runtime decision: Python 3.14
 
 Main is pinned to regular **Python 3.14** (`.python-version`); the validated
