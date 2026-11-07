@@ -165,6 +165,50 @@ Never overwrite, rename or repoint pinned weights: historical results are keyed 
 
 `checkpoints/run-medium/` (64×4) and `checkpoints/run-small/` (32×3) resume existing optimizer, replay, and iteration counters. The output directory's `latest.pt` always takes precedence over `--checkpoint`. `--iterations 0` is open-ended; positive values are total target iteration numbers, not additional iterations. Interrupted unpublished work is regenerated; the command's learning rate overrides the restored optimizer learning rate.
 
+### Runtime decision: Python 3.14
+
+Main is pinned to regular **Python 3.14** (`.python-version`); the validated
+interpreter is **3.14.4**, with Torch **2.15.0+cu132** and NumPy **2.5.4**.
+The normal runtime has its GIL enabled. `uv sync` creates the matching environment.
+
+Quiet-machine A/B: medium g80 checkpoint
+`checkpoints/run-medium/selfplay-1794006042719861991.pt`, PUCT-100/K=4,
+four CPU-only search workers, one shared parent GPU evaluator, one thread per
+process, 48 games / eight concurrent games per task. Every timing uses the same
+generation seed **2200000**, warm-up seed **2100000**, c=1.5/FPU=.2,
+Dirichlet alpha=.15/fraction=.25 and temperature 1 for 30 moves. Three passes per
+interpreter were interleaved 3.12→3.14, 3.14→3.12, 3.12→3.14; all pools closed
+between timings. Asynchronous GPU batching can change trajectories slightly;
+throughput uses each run's actual generated position count.
+
+| Python | Repeat positions/s | Median positions/s | Min–max |
+|---|---|---:|---:|
+| 3.12.14 | 49.24, 50.27, 50.83 | 50.27 | 49.24–50.83 |
+| 3.14.4 | 49.41, 51.51, 51.70 | 51.51 | 49.41–51.70 |
+
+The median difference is **+2.47%** for 3.14, inside observed run-to-run spread,
+not an established speedup. A supplementary paired-seed cohort (2200000,
+2210000, 2220000) gave medians 50.23 vs 49.21 positions/s (−2.02%), also overlapping
+spread. There is no material regression beyond that noise, so the user's 3.14
+preference wins. Minimum sampled available RAM in the identical-seed comparison
+was **8923 MiB**.
+
+Tests: main trial changes **141 passed**; merged search code **193 passed**;
+the separate 3.14 environment **193 passed**; after pinning and `uv sync`,
+**193 passed in 32.24s**. Raw timings and summaries:
+`checkpoints/dev-python314-round3-1794044881330994265/`.
+
+**Free-threaded availability, not adopted:** `uv python list` offered 3.14t;
+the throwaway probe `/tmp/msflags-py314t-round3-probe` installed binary NumPy 2.5.4,
+Torch 2.15.0+cu132 and Triton 3.9.0 under **CPython 3.14.7 free-threaded**.
+`Py_GIL_DISABLED=1`; the GIL stayed disabled after importing both NumPy and Torch,
+and Torch reported CUDA available. This establishes wheel/import availability,
+not free-threaded training performance. The first copy-mode install filled the
+7.8 GiB `/tmp` tmpfs; `uv pip install --only-binary=:all: --link-mode=symlink
+--reinstall numpy torch` against the probe interpreter fixed that without copying
+CUDA libraries into tmpfs. Production remains regular 3.14, not 3.14t.
+
+
 ### Phase B: paired value/LR trials
 
 The controlled comparisons are medium `run-medium` versus `run-medium-vw1` and small `run-small` versus `run-small-lr2e4`. Each fork starts from **exactly the control's published weights, optimizer, replay and iteration**; its immutable starting copy is `trial-start.pt`. `checkpoints/phase-b-trials.json` records the starting/target iterations, SHA-256 checksums, launch arguments and process-group PIDs. `train.pid` in each directory is the current process group. No generations are promoted merely for starting a trial.
