@@ -3,14 +3,27 @@
     "shape": {"channels": 64, "blocks": 4, "policy_beta": 3.0, "planes": 20, "policy_gamma": 3.0, "bomb_threshold": 3.0},
     "generations": [
       {"checkpoint": "checkpoints/bootstrap-medium/bootstrap-1793983777620140569.pt", "training": {"bootstrap": 8000, "selfplay": 0}},
-      {"checkpoint": "checkpoints/run-medium/selfplay-1793985122701818335.pt", "training": {"bootstrap": 8000, "selfplay": 3}}
+      {"checkpoint": "checkpoints/run-medium/selfplay-1793985122701818335.pt", "training": {"bootstrap": 8000, "selfplay": 3}},
+      {"checkpoint": "checkpoints/run-medium/selfplay-1793987394500960541.pt", "training": {"bootstrap": 8000, "selfplay": 10}},
+      {"checkpoint": "checkpoints/run-medium/selfplay-1793989905726372521.pt", "training": {"bootstrap": 8000, "selfplay": 20}},
+      {"checkpoint": "checkpoints/run-medium/selfplay-1793992302365202985.pt", "training": {"bootstrap": 8000, "selfplay": 30}},
+      {"checkpoint": "checkpoints/run-medium/selfplay-1793994727530640755.pt", "training": {"bootstrap": 8000, "selfplay": 40}},
+      {"checkpoint": "checkpoints/run-medium/selfplay-1793997381678163485.pt", "training": {"bootstrap": 8000, "selfplay": 50}},
+      {"checkpoint": "checkpoints/run-medium/selfplay-1794000174983395395.pt", "training": {"bootstrap": 8000, "selfplay": 60}},
+      {"checkpoint": "checkpoints/run-medium/selfplay-1794003121009409453.pt", "training": {"bootstrap": 8000, "selfplay": 70}},
+      {"checkpoint": "checkpoints/run-medium/selfplay-1794006042719861991.pt", "training": {"bootstrap": 8000, "selfplay": 80}}
     ]
   },
   "r32x3": {
     "shape": {"channels": 32, "blocks": 3, "policy_beta": 3.0, "planes": 20, "policy_gamma": 3.0, "bomb_threshold": 3.0},
     "generations": [
       {"checkpoint": "checkpoints/bootstrap-small/bootstrap-1793983891981972304.pt", "training": {"bootstrap": 8000, "selfplay": 0}},
-      {"checkpoint": "checkpoints/run-small/selfplay-1793985169316701862.pt", "training": {"bootstrap": 8000, "selfplay": 3}}
+      {"checkpoint": "checkpoints/run-small/selfplay-1793985169316701862.pt", "training": {"bootstrap": 8000, "selfplay": 3}},
+      {"checkpoint": "checkpoints/run-small/selfplay-1793987721493566304.pt", "training": {"bootstrap": 8000, "selfplay": 10}},
+      {"checkpoint": "checkpoints/run-small/selfplay-1793991841941549630.pt", "training": {"bootstrap": 8000, "selfplay": 20}},
+      {"checkpoint": "checkpoints/run-small/selfplay-1793996273346088599.pt", "training": {"bootstrap": 8000, "selfplay": 30}},
+      {"checkpoint": "checkpoints/run-small/selfplay-1794000355088618269.pt", "training": {"bootstrap": 8000, "selfplay": 40}},
+      {"checkpoint": "checkpoints/run-small/selfplay-1794004487721795820.pt", "training": {"bootstrap": 8000, "selfplay": 50}}
     ]
   }
 }
