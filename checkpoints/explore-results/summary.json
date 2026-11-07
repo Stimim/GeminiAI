@@ -1,0 +1,882 @@
+{
+  "start_iteration": 161,
+  "target_iteration": 181,
+  "arms": {
+    "control": {
+      "aggregate": {
+        "games": 1920,
+        "positions": 175018,
+        "policy_target_entropy": 1.5730928710072805,
+        "policy_target_effective_actions": 6.196976767915804,
+        "played_not_prior_argmax_fraction": 0.30522003451073604,
+        "mean_game_length": 91.15520833333333,
+        "bombs_per_game": 1.865625
+      },
+      "per_iteration": [
+        {
+          "iteration": 162,
+          "games": 96,
+          "positions": 8479,
+          "policy_target_entropy": 1.666274829629516,
+          "policy_target_effective_actions": 7.213647227479724,
+          "played_not_prior_argmax_fraction": 0.30428116523174903,
+          "mean_game_length": 88.32291666666667,
+          "bombs_per_game": 1.8958333333333333
+        },
+        {
+          "iteration": 163,
+          "games": 96,
+          "positions": 8537,
+          "policy_target_entropy": 1.4965368420388312,
+          "policy_target_effective_actions": 5.39885442222847,
+          "played_not_prior_argmax_fraction": 0.3068993791730116,
+          "mean_game_length": 88.92708333333333,
+          "bombs_per_game": 1.9270833333333333
+        },
+        {
+          "iteration": 164,
+          "games": 96,
+          "positions": 8912,
+          "policy_target_entropy": 1.4554980110218207,
+          "policy_target_effective_actions": 5.170939958558769,
+          "played_not_prior_argmax_fraction": 0.29005834829443444,
+          "mean_game_length": 92.83333333333333,
+          "bombs_per_game": 1.8958333333333333
+        },
+        {
+          "iteration": 165,
+          "games": 96,
+          "positions": 8469,
+          "policy_target_entropy": 1.510498281637912,
+          "policy_target_effective_actions": 5.658564883653551,
+          "played_not_prior_argmax_fraction": 0.3097177943086551,
+          "mean_game_length": 88.21875,
+          "bombs_per_game": 1.7916666666666667
+        },
+        {
+          "iteration": 166,
+          "games": 96,
+          "positions": 8796,
+          "policy_target_entropy": 1.7425723582016954,
+          "policy_target_effective_actions": 9.026487269162233,
+          "played_not_prior_argmax_fraction": 0.31355161437016826,
+          "mean_game_length": 91.625,
+          "bombs_per_game": 1.875
+        },
+        {
+          "iteration": 167,
+          "games": 96,
+          "positions": 8966,
+          "policy_target_entropy": 1.5175590991099657,
+          "policy_target_effective_actions": 5.674483018497859,
+          "played_not_prior_argmax_fraction": 0.2935534240463975,
+          "mean_game_length": 93.39583333333333,
+          "bombs_per_game": 1.9583333333333333
+        },
+        {
+          "iteration": 168,
+          "games": 96,
+          "positions": 8219,
+          "policy_target_entropy": 1.5464137402071116,
+          "policy_target_effective_actions": 5.716527989184183,
+          "played_not_prior_argmax_fraction": 0.2989414770653364,
+          "mean_game_length": 85.61458333333333,
+          "bombs_per_game": 1.8854166666666667
+        },
+        {
+          "iteration": 169,
+          "games": 96,
+          "positions": 8460,
+          "policy_target_entropy": 1.6295597153044232,
+          "policy_target_effective_actions": 6.6280264679410985,
+          "played_not_prior_argmax_fraction": 0.2832151300236407,
+          "mean_game_length": 88.125,
+          "bombs_per_game": 1.9270833333333333
+        },
+        {
+          "iteration": 170,
+          "games": 96,
+          "positions": 8491,
+          "policy_target_entropy": 1.5125944630212083,
+          "policy_target_effective_actions": 5.613376002087645,
+          "played_not_prior_argmax_fraction": 0.2963137439641974,
+          "mean_game_length": 88.44791666666667,
+          "bombs_per_game": 1.8854166666666667
+        },
+        {
+          "iteration": 171,
+          "games": 96,
+          "positions": 8989,
+          "policy_target_entropy": 1.5632744437827935,
+          "policy_target_effective_actions": 6.1702711426089385,
+          "played_not_prior_argmax_fraction": 0.2999221270441651,
+          "mean_game_length": 93.63541666666667,
+          "bombs_per_game": 1.7604166666666667
+        },
+        {
+          "iteration": 172,
+          "games": 96,
+          "positions": 8858,
+          "policy_target_entropy": 1.6596096249194374,
+          "policy_target_effective_actions": 7.192147746096921,
+          "played_not_prior_argmax_fraction": 0.32614585685256264,
+          "mean_game_length": 92.27083333333333,
+          "bombs_per_game": 1.8229166666666667
+        },
+        {
+          "iteration": 173,
+          "games": 96,
+          "positions": 9068,
+          "policy_target_entropy": 1.5353666680546028,
+          "policy_target_effective_actions": 5.746957582202499,
+          "played_not_prior_argmax_fraction": 0.29036171151301277,
+          "mean_game_length": 94.45833333333333,
+          "bombs_per_game": 1.90625
+        },
+        {
+          "iteration": 174,
+          "games": 96,
+          "positions": 8350,
+          "policy_target_entropy": 1.5268972349063565,
+          "policy_target_effective_actions": 5.4827917486783795,
+          "played_not_prior_argmax_fraction": 0.3118562874251497,
+          "mean_game_length": 86.97916666666667,
+          "bombs_per_game": 1.875
+        },
+        {
+          "iteration": 175,
+          "games": 96,
+          "positions": 8745,
+          "policy_target_entropy": 1.62736462834539,
+          "policy_target_effective_actions": 7.0374762365434025,
+          "played_not_prior_argmax_fraction": 0.31640937678673525,
+          "mean_game_length": 91.09375,
+          "bombs_per_game": 1.8854166666666667
+        },
+        {
+          "iteration": 176,
+          "games": 96,
+          "positions": 9535,
+          "policy_target_entropy": 1.5993879458532567,
+          "policy_target_effective_actions": 6.435966696817615,
+          "played_not_prior_argmax_fraction": 0.29365495542737285,
+          "mean_game_length": 99.32291666666667,
+          "bombs_per_game": 1.7916666666666667
+        },
+        {
+          "iteration": 177,
+          "games": 96,
+          "positions": 9006,
+          "policy_target_entropy": 1.5330288654997188,
+          "policy_target_effective_actions": 5.4179930856535545,
+          "played_not_prior_argmax_fraction": 0.29980013324450366,
+          "mean_game_length": 93.8125,
+          "bombs_per_game": 1.90625
+        },
+        {
+          "iteration": 178,
+          "games": 96,
+          "positions": 9340,
+          "policy_target_entropy": 1.589073465703858,
+          "policy_target_effective_actions": 6.164451392920097,
+          "played_not_prior_argmax_fraction": 0.3229122055674518,
+          "mean_game_length": 97.29166666666667,
+          "bombs_per_game": 1.7604166666666667
+        },
+        {
+          "iteration": 179,
+          "games": 96,
+          "positions": 8741,
+          "policy_target_entropy": 1.547982580186439,
+          "policy_target_effective_actions": 5.7436119015172045,
+          "played_not_prior_argmax_fraction": 0.30557144491476945,
+          "mean_game_length": 91.05208333333333,
+          "bombs_per_game": 1.8541666666666667
+        },
+        {
+          "iteration": 180,
+          "games": 96,
+          "positions": 8251,
+          "policy_target_entropy": 1.683202742384279,
+          "policy_target_effective_actions": 6.871885011555467,
+          "played_not_prior_argmax_fraction": 0.3227487577263362,
+          "mean_game_length": 85.94791666666667,
+          "bombs_per_game": 1.8958333333333333
+        },
+        {
+          "iteration": 181,
+          "games": 96,
+          "positions": 8806,
+          "policy_target_entropy": 1.522098978042479,
+          "policy_target_effective_actions": 5.572911528179791,
+          "played_not_prior_argmax_fraction": 0.3194412900295253,
+          "mean_game_length": 91.72916666666667,
+          "bombs_per_game": 1.8125
+        }
+      ],
+      "validations": [
+        {
+          "event": "value_validation",
+          "time": 1794064050.040047,
+          "games": 16,
+          "positions": 1291,
+          "seed": 1000625840,
+          "policy": "selfplay",
+          "replay_inserted": false,
+          "mse": 0.7183297872543335,
+          "zero_mse": 1.0,
+          "score_leader_accuracy": 0.8071262587141751,
+          "accuracy": 0.7784663051897753,
+          "prediction_mean": 0.22694365680217743,
+          "target_mean": 0.07513555139303207,
+          "score_bands": [
+            {
+              "score_min": 0,
+              "score_max_exclusive": 10,
+              "positions": 105,
+              "mse": 0.5501518249511719,
+              "accuracy": 0.8095238095238095
+            },
+            {
+              "score_min": 10,
+              "score_max_exclusive": 25,
+              "positions": 346,
+              "mse": 0.9533884525299072,
+              "accuracy": 0.7225433526011561
+            },
+            {
+              "score_min": 25,
+              "score_max_exclusive": 40,
+              "positions": 497,
+              "mse": 0.5090359449386597,
+              "accuracy": 0.8591549295774648
+            },
+            {
+              "score_min": 40,
+              "score_max_exclusive": 53,
+              "positions": 343,
+              "mse": 0.8359606266021729,
+              "accuracy": 0.7084548104956269
+            }
+          ],
+          "generation_seconds": 54.82055180892348,
+          "seconds": 54.873630877933465,
+          "iteration": 165
+        },
+        {
+          "event": "value_validation",
+          "time": 1794064927.9679635,
+          "games": 16,
+          "positions": 1455,
+          "seed": 1000626320,
+          "policy": "selfplay",
+          "replay_inserted": false,
+          "mse": 0.909145712852478,
+          "zero_mse": 1.0,
+          "score_leader_accuracy": 0.7731958762886598,
+          "accuracy": 0.7168384879725086,
+          "prediction_mean": -0.004190598148852587,
+          "target_mean": 0.055670104920864105,
+          "score_bands": [
+            {
+              "score_min": 0,
+              "score_max_exclusive": 10,
+              "positions": 83,
+              "mse": 1.1418551206588745,
+              "accuracy": 0.46987951807228917
+            },
+            {
+              "score_min": 10,
+              "score_max_exclusive": 25,
+              "positions": 371,
+              "mse": 0.8937868475914001,
+              "accuracy": 0.7035040431266847
+            },
+            {
+              "score_min": 25,
+              "score_max_exclusive": 40,
+              "positions": 595,
+              "mse": 0.821456253528595,
+              "accuracy": 0.7495798319327731
+            },
+            {
+              "score_min": 40,
+              "score_max_exclusive": 53,
+              "positions": 406,
+              "mse": 1.0041173696517944,
+              "accuracy": 0.7315270935960592
+            }
+          ],
+          "generation_seconds": 64.52927291893866,
+          "seconds": 64.60120297095273,
+          "iteration": 170
+        },
+        {
+          "event": "value_validation",
+          "time": 1794065838.5391219,
+          "games": 16,
+          "positions": 1511,
+          "seed": 1000626800,
+          "policy": "selfplay",
+          "replay_inserted": false,
+          "mse": 1.04082190990448,
+          "zero_mse": 1.0,
+          "score_leader_accuracy": 0.8074123097286565,
+          "accuracy": 0.6730641958967571,
+          "prediction_mean": 0.02465229481458664,
+          "target_mean": 0.06154864281415939,
+          "score_bands": [
+            {
+              "score_min": 0,
+              "score_max_exclusive": 10,
+              "positions": 115,
+              "mse": 1.0615551471710205,
+              "accuracy": 0.5478260869565217
+            },
+            {
+              "score_min": 10,
+              "score_max_exclusive": 25,
+              "positions": 449,
+              "mse": 1.3227272033691406,
+              "accuracy": 0.5924276169265034
+            },
+            {
+              "score_min": 25,
+              "score_max_exclusive": 40,
+              "positions": 680,
+              "mse": 0.9642005562782288,
+              "accuracy": 0.7279411764705882
+            },
+            {
+              "score_min": 40,
+              "score_max_exclusive": 53,
+              "positions": 267,
+              "mse": 0.7529662847518921,
+              "accuracy": 0.7228464419475655
+            }
+          ],
+          "generation_seconds": 62.87110541306902,
+          "seconds": 63.0647088669939,
+          "iteration": 175
+        },
+        {
+          "event": "value_validation",
+          "time": 1794066627.9271007,
+          "games": 16,
+          "positions": 1567,
+          "seed": 1000627280,
+          "policy": "selfplay",
+          "replay_inserted": false,
+          "mse": 0.61858731508255,
+          "zero_mse": 1.0,
+          "score_leader_accuracy": 0.6853860880663688,
+          "accuracy": 0.7760051052967454,
+          "prediction_mean": 0.07741692662239075,
+          "target_mean": 0.07849393784999847,
+          "score_bands": [
+            {
+              "score_min": 0,
+              "score_max_exclusive": 10,
+              "positions": 101,
+              "mse": 1.1206109523773193,
+              "accuracy": 0.5544554455445545
+            },
+            {
+              "score_min": 10,
+              "score_max_exclusive": 25,
+              "positions": 387,
+              "mse": 0.4950259029865265,
+              "accuracy": 0.8268733850129198
+            },
+            {
+              "score_min": 25,
+              "score_max_exclusive": 40,
+              "positions": 648,
+              "mse": 0.5112306475639343,
+              "accuracy": 0.8209876543209876
+            },
+            {
+              "score_min": 40,
+              "score_max_exclusive": 53,
+              "positions": 431,
+              "mse": 0.773299515247345,
+              "accuracy": 0.7146171693735499
+            }
+          ],
+          "generation_seconds": 61.37847771507222,
+          "seconds": 61.51341479702387,
+          "iteration": 180
+        }
+      ],
+      "launched_at": 1794063354.6793182,
+      "final_iteration_time": 1794066758.2121346,
+      "duration_seconds": 3403.5328164100647,
+      "final_checkpoint": "checkpoints/run-medium/selfplay-1794066758193997836.pt",
+      "final_checkpoint_sha256": "b507d3ac08e69e27abc4a7b69e8712847ac7cba1a475c2845f3303c93d70cb49",
+      "memory_after_first": "               total        used        free      shared  buff/cache   available\nMem:           15843       11542        1121        2995        6415        4301\nSwap:           4096        3038        1057\n",
+      "first_iteration_seconds": 170.43784351099748
+    },
+    "treatment": {
+      "aggregate": {
+        "games": 1920,
+        "positions": 136486,
+        "policy_target_entropy": 1.7206520889580659,
+        "policy_target_effective_actions": 7.1529138416527065,
+        "played_not_prior_argmax_fraction": 0.5656843925384288,
+        "mean_game_length": 71.08645833333334,
+        "bombs_per_game": 1.975
+      },
+      "per_iteration": [
+        {
+          "iteration": 162,
+          "games": 96,
+          "positions": 7046,
+          "policy_target_entropy": 1.73833213624463,
+          "policy_target_effective_actions": 7.12715730737588,
+          "played_not_prior_argmax_fraction": 0.562162929321601,
+          "mean_game_length": 73.39583333333333,
+          "bombs_per_game": 1.9895833333333333
+        },
+        {
+          "iteration": 163,
+          "games": 96,
+          "positions": 6660,
+          "policy_target_entropy": 1.7842094230450796,
+          "policy_target_effective_actions": 7.909358415429666,
+          "played_not_prior_argmax_fraction": 0.572972972972973,
+          "mean_game_length": 69.375,
+          "bombs_per_game": 1.9895833333333333
+        },
+        {
+          "iteration": 164,
+          "games": 96,
+          "positions": 6921,
+          "policy_target_entropy": 1.7969930217505492,
+          "policy_target_effective_actions": 8.277558241394967,
+          "played_not_prior_argmax_fraction": 0.5583008235804074,
+          "mean_game_length": 72.09375,
+          "bombs_per_game": 1.96875
+        },
+        {
+          "iteration": 165,
+          "games": 96,
+          "positions": 6569,
+          "policy_target_entropy": 1.7207473651340999,
+          "policy_target_effective_actions": 6.774822646973962,
+          "played_not_prior_argmax_fraction": 0.5803014157405998,
+          "mean_game_length": 68.42708333333333,
+          "bombs_per_game": 1.96875
+        },
+        {
+          "iteration": 166,
+          "games": 96,
+          "positions": 6954,
+          "policy_target_entropy": 1.6339566640910217,
+          "policy_target_effective_actions": 6.240338719619441,
+          "played_not_prior_argmax_fraction": 0.540696002300834,
+          "mean_game_length": 72.4375,
+          "bombs_per_game": 1.9479166666666667
+        },
+        {
+          "iteration": 167,
+          "games": 96,
+          "positions": 7067,
+          "policy_target_entropy": 1.7575110728973553,
+          "policy_target_effective_actions": 7.569911375466383,
+          "played_not_prior_argmax_fraction": 0.5685580868826942,
+          "mean_game_length": 73.61458333333333,
+          "bombs_per_game": 2.0
+        },
+        {
+          "iteration": 168,
+          "games": 96,
+          "positions": 7222,
+          "policy_target_entropy": 1.738562130799055,
+          "policy_target_effective_actions": 7.617934668255233,
+          "played_not_prior_argmax_fraction": 0.540293547493769,
+          "mean_game_length": 75.22916666666667,
+          "bombs_per_game": 1.9479166666666667
+        },
+        {
+          "iteration": 169,
+          "games": 96,
+          "positions": 6619,
+          "policy_target_entropy": 1.7470749770635057,
+          "policy_target_effective_actions": 7.05073149255965,
+          "played_not_prior_argmax_fraction": 0.5667019187188397,
+          "mean_game_length": 68.94791666666667,
+          "bombs_per_game": 1.9791666666666667
+        },
+        {
+          "iteration": 170,
+          "games": 96,
+          "positions": 6883,
+          "policy_target_entropy": 1.7905571171381316,
+          "policy_target_effective_actions": 8.181380547524192,
+          "played_not_prior_argmax_fraction": 0.5872439343309603,
+          "mean_game_length": 71.69791666666667,
+          "bombs_per_game": 1.9791666666666667
+        },
+        {
+          "iteration": 171,
+          "games": 96,
+          "positions": 6525,
+          "policy_target_entropy": 1.6925996933820333,
+          "policy_target_effective_actions": 6.609544493670251,
+          "played_not_prior_argmax_fraction": 0.5862068965517241,
+          "mean_game_length": 67.96875,
+          "bombs_per_game": 2.0
+        },
+        {
+          "iteration": 172,
+          "games": 96,
+          "positions": 6720,
+          "policy_target_entropy": 1.704863390249731,
+          "policy_target_effective_actions": 7.123085101423367,
+          "played_not_prior_argmax_fraction": 0.5629464285714286,
+          "mean_game_length": 70.0,
+          "bombs_per_game": 1.9895833333333333
+        },
+        {
+          "iteration": 173,
+          "games": 96,
+          "positions": 7104,
+          "policy_target_entropy": 1.835554800602594,
+          "policy_target_effective_actions": 8.416159386448474,
+          "played_not_prior_argmax_fraction": 0.5670045045045045,
+          "mean_game_length": 74.0,
+          "bombs_per_game": 1.9375
+        },
+        {
+          "iteration": 174,
+          "games": 96,
+          "positions": 7063,
+          "policy_target_entropy": 1.7038462583901635,
+          "policy_target_effective_actions": 7.001813236838016,
+          "played_not_prior_argmax_fraction": 0.5576950304403228,
+          "mean_game_length": 73.57291666666667,
+          "bombs_per_game": 1.9791666666666667
+        },
+        {
+          "iteration": 175,
+          "games": 96,
+          "positions": 6297,
+          "policy_target_entropy": 1.6191586777198457,
+          "policy_target_effective_actions": 5.903447656675252,
+          "played_not_prior_argmax_fraction": 0.5780530411306971,
+          "mean_game_length": 65.59375,
+          "bombs_per_game": 1.9895833333333333
+        },
+        {
+          "iteration": 176,
+          "games": 96,
+          "positions": 7232,
+          "policy_target_entropy": 1.7321114990529003,
+          "policy_target_effective_actions": 7.559740873776777,
+          "played_not_prior_argmax_fraction": 0.558075221238938,
+          "mean_game_length": 75.33333333333333,
+          "bombs_per_game": 1.96875
+        },
+        {
+          "iteration": 177,
+          "games": 96,
+          "positions": 6782,
+          "policy_target_entropy": 1.6954198031488381,
+          "policy_target_effective_actions": 6.65154132600094,
+          "played_not_prior_argmax_fraction": 0.5687112946033619,
+          "mean_game_length": 70.64583333333333,
+          "bombs_per_game": 2.0
+        },
+        {
+          "iteration": 178,
+          "games": 96,
+          "positions": 6667,
+          "policy_target_entropy": 1.6813856607773756,
+          "policy_target_effective_actions": 6.69598998314667,
+          "played_not_prior_argmax_fraction": 0.5728213589320534,
+          "mean_game_length": 69.44791666666667,
+          "bombs_per_game": 1.9583333333333333
+        },
+        {
+          "iteration": 179,
+          "games": 96,
+          "positions": 6448,
+          "policy_target_entropy": 1.7849980415883313,
+          "policy_target_effective_actions": 8.094489046752226,
+          "played_not_prior_argmax_fraction": 0.5930521091811415,
+          "mean_game_length": 67.16666666666667,
+          "bombs_per_game": 1.9791666666666667
+        },
+        {
+          "iteration": 180,
+          "games": 96,
+          "positions": 7003,
+          "policy_target_entropy": 1.6478688911416166,
+          "policy_target_effective_actions": 6.15761369527844,
+          "played_not_prior_argmax_fraction": 0.5489076110238469,
+          "mean_game_length": 72.94791666666667,
+          "bombs_per_game": 1.96875
+        },
+        {
+          "iteration": 181,
+          "games": 96,
+          "positions": 6704,
+          "policy_target_entropy": 1.594707843140714,
+          "policy_target_effective_actions": 5.898727905842643,
+          "played_not_prior_argmax_fraction": 0.5499701670644391,
+          "mean_game_length": 69.83333333333333,
+          "bombs_per_game": 1.9583333333333333
+        }
+      ],
+      "validations": [
+        {
+          "event": "value_validation",
+          "time": 1794063911.6481097,
+          "games": 16,
+          "positions": 1080,
+          "seed": 1000625840,
+          "policy": "selfplay",
+          "replay_inserted": false,
+          "mse": 0.7925428152084351,
+          "zero_mse": 1.0,
+          "score_leader_accuracy": 0.7685185185185185,
+          "accuracy": 0.7379629629629629,
+          "prediction_mean": 0.009595535695552826,
+          "target_mean": 0.10555555671453476,
+          "score_bands": [
+            {
+              "score_min": 0,
+              "score_max_exclusive": 10,
+              "positions": 88,
+              "mse": 0.8477956652641296,
+              "accuracy": 0.6704545454545454
+            },
+            {
+              "score_min": 10,
+              "score_max_exclusive": 25,
+              "positions": 347,
+              "mse": 1.2641737461090088,
+              "accuracy": 0.6195965417867435
+            },
+            {
+              "score_min": 25,
+              "score_max_exclusive": 40,
+              "positions": 453,
+              "mse": 0.6622258424758911,
+              "accuracy": 0.7615894039735099
+            },
+            {
+              "score_min": 40,
+              "score_max_exclusive": 53,
+              "positions": 192,
+              "mse": 0.22231052815914154,
+              "accuracy": 0.9270833333333334
+            }
+          ],
+          "generation_seconds": 46.20955802104436,
+          "seconds": 46.26327436801512,
+          "iteration": 165
+        },
+        {
+          "event": "value_validation",
+          "time": 1794064641.7270534,
+          "games": 16,
+          "positions": 979,
+          "seed": 1000626320,
+          "policy": "selfplay",
+          "replay_inserted": false,
+          "mse": 1.016294240951538,
+          "zero_mse": 1.0,
+          "score_leader_accuracy": 0.7834525025536262,
+          "accuracy": 0.6813074565883555,
+          "prediction_mean": 0.11099615693092346,
+          "target_mean": 0.13585291802883148,
+          "score_bands": [
+            {
+              "score_min": 0,
+              "score_max_exclusive": 10,
+              "positions": 93,
+              "mse": 0.8259116411209106,
+              "accuracy": 0.6774193548387096
+            },
+            {
+              "score_min": 10,
+              "score_max_exclusive": 25,
+              "positions": 342,
+              "mse": 1.368179202079773,
+              "accuracy": 0.5789473684210527
+            },
+            {
+              "score_min": 25,
+              "score_max_exclusive": 40,
+              "positions": 388,
+              "mse": 0.6450984477996826,
+              "accuracy": 0.8144329896907216
+            },
+            {
+              "score_min": 40,
+              "score_max_exclusive": 53,
+              "positions": 156,
+              "mse": 1.2815824747085571,
+              "accuracy": 0.5769230769230769
+            }
+          ],
+          "generation_seconds": 39.55789104604628,
+          "seconds": 39.73249545402359,
+          "iteration": 170
+        },
+        {
+          "event": "value_validation",
+          "time": 1794065322.3994355,
+          "games": 16,
+          "positions": 1164,
+          "seed": 1000626800,
+          "policy": "selfplay",
+          "replay_inserted": false,
+          "mse": 1.2979915142059326,
+          "zero_mse": 1.0,
+          "score_leader_accuracy": 0.6907216494845361,
+          "accuracy": 0.622852233676976,
+          "prediction_mean": 0.0774584487080574,
+          "target_mean": 0.08762886375188828,
+          "score_bands": [
+            {
+              "score_min": 0,
+              "score_max_exclusive": 10,
+              "positions": 103,
+              "mse": 0.9979062676429749,
+              "accuracy": 0.5242718446601942
+            },
+            {
+              "score_min": 10,
+              "score_max_exclusive": 25,
+              "positions": 340,
+              "mse": 1.2740579843521118,
+              "accuracy": 0.6264705882352941
+            },
+            {
+              "score_min": 25,
+              "score_max_exclusive": 40,
+              "positions": 481,
+              "mse": 1.0903974771499634,
+              "accuracy": 0.7027027027027027
+            },
+            {
+              "score_min": 40,
+              "score_max_exclusive": 53,
+              "positions": 240,
+              "mse": 1.876737356185913,
+              "accuracy": 0.5
+            }
+          ],
+          "generation_seconds": 49.52368830400519,
+          "seconds": 49.58025815105066,
+          "iteration": 175
+        },
+        {
+          "event": "value_validation",
+          "time": 1794066024.3379393,
+          "games": 16,
+          "positions": 1086,
+          "seed": 1000627280,
+          "policy": "selfplay",
+          "replay_inserted": false,
+          "mse": 0.882785439491272,
+          "zero_mse": 1.0,
+          "score_leader_accuracy": 0.7265193370165746,
+          "accuracy": 0.7357274401473296,
+          "prediction_mean": 0.0647527351975441,
+          "target_mean": 0.11602210253477097,
+          "score_bands": [
+            {
+              "score_min": 0,
+              "score_max_exclusive": 10,
+              "positions": 72,
+              "mse": 1.2219637632369995,
+              "accuracy": 0.4583333333333333
+            },
+            {
+              "score_min": 10,
+              "score_max_exclusive": 25,
+              "positions": 364,
+              "mse": 0.8946658968925476,
+              "accuracy": 0.7252747252747253
+            },
+            {
+              "score_min": 25,
+              "score_max_exclusive": 40,
+              "positions": 467,
+              "mse": 0.7007214426994324,
+              "accuracy": 0.8115631691648822
+            },
+            {
+              "score_min": 40,
+              "score_max_exclusive": 53,
+              "positions": 183,
+              "mse": 1.1903184652328491,
+              "accuracy": 0.6721311475409836
+            }
+          ],
+          "generation_seconds": 42.16937915596645,
+          "seconds": 42.22410026600119,
+          "iteration": 180
+        }
+      ],
+      "launched_at": 1794063354.8047726,
+      "final_iteration_time": 1794066157.6287973,
+      "duration_seconds": 2802.8240246772766,
+      "final_checkpoint": "checkpoints/run-medium-explore/selfplay-1794066157612533050.pt",
+      "final_checkpoint_sha256": "a499b72c71dcc6a9f33eb11f111d11786c45887c51b63a726841261c98e57441",
+      "memory_after_first": "               total        used        free      shared  buff/cache   available\nMem:           15843       11089        1736        2995        6251        4754\nSwap:           4096        3038        1057\n",
+      "first_iteration_seconds": 133.80804762302432
+    }
+  },
+  "comparisons": [
+    {
+      "name": "treatment-control-greedy",
+      "wins": 88,
+      "games": 200,
+      "win_rate": 0.44,
+      "paired_bootstrap_95": [
+        0.37,
+        0.515
+      ],
+      "seed": 7310000
+    },
+    {
+      "name": "treatment-control-mcts",
+      "wins": 90,
+      "games": 200,
+      "win_rate": 0.45,
+      "paired_bootstrap_95": [
+        0.38,
+        0.52
+      ],
+      "seed": 7320000
+    },
+    {
+      "name": "treatment-start-greedy",
+      "wins": 88,
+      "games": 200,
+      "win_rate": 0.44,
+      "paired_bootstrap_95": [
+        0.375,
+        0.505
+      ],
+      "seed": 7330000
+    },
+    {
+      "name": "control-start-greedy",
+      "wins": 102,
+      "games": 200,
+      "win_rate": 0.51,
+      "paired_bootstrap_95": [
+        0.45,
+        0.57
+      ],
+      "seed": 7340000
+    }
+  ],
+  "minimum_sampled_available_mib": 3672,
+  "memory_after_both_first_iterations": "               total        used        free      shared  buff/cache   available\nMem:           15843       11542        1121        2995        6415        4301\nSwap:           4096        3038        1057\n"
+}

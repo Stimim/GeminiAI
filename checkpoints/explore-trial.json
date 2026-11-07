@@ -1,0 +1,1678 @@
+{
+  "created_at": 1794063354.3792417,
+  "source_revision": "afe3235b3985451401d8583cb97fb747a2387f40",
+  "start_iteration": 161,
+  "target_iteration": 181,
+  "snapshot": "checkpoints/explore-start/trial-start.pt",
+  "checkpoint_sha256": "54c552017b5d6a7e6c107fb13db09d8079eda6b898cbec3f39452208d86b92d1",
+  "replay_file": "replay-1.npz",
+  "replay_sha256": "394d24afdf6297ebd3f2bc2773d87cdf2cfd8396aa178a3b33bf5fc0986e95f9",
+  "snapshot_equality_verified": true,
+  "prelaunch_memory": "               total        used        free      shared  buff/cache   available\nMem:           15843        4452        9309        2839        5158       11391\nSwap:           4096        3038        1057\n",
+  "tests": "uv run pytest -q: 196 passed in 28.66s",
+  "runs": [
+    {
+      "arm": "control",
+      "directory": "checkpoints/run-medium",
+      "pid": 1824420,
+      "argv": [
+        "uv",
+        "run",
+        "python",
+        "-m",
+        "msflags.train",
+        "selfplay",
+        "--iterations",
+        "181",
+        "--games",
+        "96",
+        "--concurrent-games",
+        "16",
+        "--workers",
+        "4",
+        "--worker-threads",
+        "1",
+        "--cpu-share",
+        "5",
+        "--threads",
+        "1",
+        "--search",
+        "puct",
+        "--sims",
+        "100",
+        "--leaf-batch-size",
+        "4",
+        "--c-puct",
+        "1.5",
+        "--fpu-reduction",
+        ".2",
+        "--steps",
+        "300",
+        "--batch-size",
+        "128",
+        "--replay-size",
+        "50000",
+        "--lr",
+        ".0002",
+        "--value-weight",
+        ".25",
+        "--mine-weight",
+        "2",
+        "--eval-every",
+        "5",
+        "--eval-games",
+        "100",
+        "--value-validation-every",
+        "5",
+        "--value-validation-games",
+        "16",
+        "--seed",
+        "610000",
+        "--device",
+        "cuda",
+        "--disk-root",
+        "checkpoints",
+        "--temperature",
+        "1",
+        "--dirichlet-frac",
+        ".25",
+        "--output",
+        "checkpoints/run-medium",
+        "--dirichlet-alpha",
+        ".15",
+        "--temperature-moves",
+        "30"
+      ],
+      "launched_at": 1794063354.6793182,
+      "checkpoint_sha256_at_launch": "54c552017b5d6a7e6c107fb13db09d8079eda6b898cbec3f39452208d86b92d1",
+      "replay_sha256_at_launch": "394d24afdf6297ebd3f2bc2773d87cdf2cfd8396aa178a3b33bf5fc0986e95f9",
+      "first_iteration": {
+        "event": "iteration",
+        "time": 1794063527.731866,
+        "iteration": 162,
+        "seconds": 170.43784351099748,
+        "generation_seconds": 162.81587749905884,
+        "training_seconds": 7.343371768016368,
+        "save_seconds": 0.1299209559801966,
+        "validation_seconds": 0.0,
+        "games": 96,
+        "games_per_second": 0.5896230851352623,
+        "new_positions": 8479,
+        "replay_positions": 50000,
+        "sample_reuse": 4.528835947635335,
+        "checkpoint": "checkpoints/run-medium/selfplay-1794063527706731610.pt",
+        "peak_vram_mb": 134.93212890625
+      },
+      "memory_after_first_iteration": "               total        used        free      shared  buff/cache   available\nMem:           15843       11542        1121        2995        6415        4301\nSwap:           4096        3038        1057\n",
+      "completed_at_observed": 1794066761.7538238,
+      "final_iteration": {
+        "event": "iteration",
+        "time": 1794066758.2121346,
+        "iteration": 181,
+        "seconds": 125.88636135996785,
+        "generation_seconds": 120.98459351598285,
+        "training_seconds": 4.717709104996175,
+        "save_seconds": 0.10060868202708662,
+        "validation_seconds": 0.0,
+        "games": 96,
+        "games_per_second": 0.7934894618405919,
+        "new_positions": 8806,
+        "replay_positions": 50000,
+        "sample_reuse": 4.360663184192596,
+        "checkpoint": "checkpoints/run-medium/selfplay-1794066758193997836.pt",
+        "peak_vram_mb": 107.1796875
+      }
+    },
+    {
+      "arm": "treatment",
+      "directory": "checkpoints/run-medium-explore",
+      "pid": 1824449,
+      "argv": [
+        "uv",
+        "run",
+        "python",
+        "-m",
+        "msflags.train",
+        "selfplay",
+        "--iterations",
+        "181",
+        "--games",
+        "96",
+        "--concurrent-games",
+        "16",
+        "--workers",
+        "4",
+        "--worker-threads",
+        "1",
+        "--cpu-share",
+        "5",
+        "--threads",
+        "1",
+        "--search",
+        "puct",
+        "--sims",
+        "100",
+        "--leaf-batch-size",
+        "4",
+        "--c-puct",
+        "1.5",
+        "--fpu-reduction",
+        ".2",
+        "--steps",
+        "300",
+        "--batch-size",
+        "128",
+        "--replay-size",
+        "50000",
+        "--lr",
+        ".0002",
+        "--value-weight",
+        ".25",
+        "--mine-weight",
+        "2",
+        "--eval-every",
+        "5",
+        "--eval-games",
+        "100",
+        "--value-validation-every",
+        "5",
+        "--value-validation-games",
+        "16",
+        "--seed",
+        "610000",
+        "--device",
+        "cuda",
+        "--disk-root",
+        "checkpoints",
+        "--temperature",
+        "1",
+        "--dirichlet-frac",
+        ".25",
+        "--output",
+        "checkpoints/run-medium-explore",
+        "--dirichlet-alpha",
+        ".03",
+        "--temperature-moves",
+        "60"
+      ],
+      "launched_at": 1794063354.8047726,
+      "checkpoint_sha256_at_launch": "54c552017b5d6a7e6c107fb13db09d8079eda6b898cbec3f39452208d86b92d1",
+      "replay_sha256_at_launch": "394d24afdf6297ebd3f2bc2773d87cdf2cfd8396aa178a3b33bf5fc0986e95f9",
+      "first_iteration": {
+        "event": "iteration",
+        "time": 1794063490.9017992,
+        "iteration": 162,
+        "seconds": 133.80804762302432,
+        "generation_seconds": 126.88295264495537,
+        "training_seconds": 6.678802034934051,
+        "save_seconds": 0.10504561802372336,
+        "validation_seconds": 0.0,
+        "games": 96,
+        "games_per_second": 0.7566028217252145,
+        "new_positions": 7046,
+        "replay_positions": 50000,
+        "sample_reuse": 5.4499006528526825,
+        "checkpoint": "checkpoints/run-medium-explore/selfplay-1794063490883132607.pt",
+        "peak_vram_mb": 134.93212890625
+      },
+      "memory_after_first_iteration": "               total        used        free      shared  buff/cache   available\nMem:           15843       11089        1736        2995        6251        4754\nSwap:           4096        3038        1057\n",
+      "completed_at_observed": 1794066761.7558274,
+      "final_iteration": {
+        "event": "iteration",
+        "time": 1794066157.6287973,
+        "iteration": 181,
+        "seconds": 128.73493090295233,
+        "generation_seconds": 122.93065905303229,
+        "training_seconds": 5.606392360059544,
+        "save_seconds": 0.10131298203486949,
+        "validation_seconds": 0.0,
+        "games": 96,
+        "games_per_second": 0.7809280511429261,
+        "new_positions": 6704,
+        "replay_positions": 50000,
+        "sample_reuse": 5.727923627684964,
+        "checkpoint": "checkpoints/run-medium-explore/selfplay-1794066157612533050.pt",
+        "peak_vram_mb": 107.1796875
+      }
+    }
+  ],
+  "memory_samples": [
+    {
+      "time": 1794063414.9617963,
+      "available_mib": 5268
+    },
+    {
+      "time": 1794063427.018068,
+      "available_mib": 5281
+    },
+    {
+      "time": 1794063439.0592108,
+      "available_mib": 5239
+    },
+    {
+      "time": 1794063451.10084,
+      "available_mib": 5242
+    },
+    {
+      "time": 1794063463.1521158,
+      "available_mib": 5215
+    },
+    {
+      "time": 1794063475.1978254,
+      "available_mib": 5231
+    },
+    {
+      "time": 1794063487.2362583,
+      "available_mib": 4245
+    },
+    {
+      "time": 1794063499.2800627,
+      "available_mib": 4774
+    },
+    {
+      "time": 1794063511.3379183,
+      "available_mib": 4771
+    },
+    {
+      "time": 1794063523.4022515,
+      "available_mib": 3817
+    },
+    {
+      "time": 1794063535.4450634,
+      "available_mib": 4323
+    },
+    {
+      "time": 1794063547.4483283,
+      "available_mib": 4349
+    },
+    {
+      "time": 1794063559.4536846,
+      "available_mib": 4332
+    },
+    {
+      "time": 1794063571.4570763,
+      "available_mib": 4306
+    },
+    {
+      "time": 1794063583.4608138,
+      "available_mib": 4303
+    },
+    {
+      "time": 1794063595.4645612,
+      "available_mib": 4307
+    },
+    {
+      "time": 1794063607.4676242,
+      "available_mib": 4249
+    },
+    {
+      "time": 1794063619.470605,
+      "available_mib": 4259
+    },
+    {
+      "time": 1794063631.4744809,
+      "available_mib": 4256
+    },
+    {
+      "time": 1794063643.4780107,
+      "available_mib": 4233
+    },
+    {
+      "time": 1794063655.4856684,
+      "available_mib": 4253
+    },
+    {
+      "time": 1794063667.4907694,
+      "available_mib": 4226
+    },
+    {
+      "time": 1794063679.4943314,
+      "available_mib": 3677
+    },
+    {
+      "time": 1794063691.4978673,
+      "available_mib": 4170
+    },
+    {
+      "time": 1794063703.5070107,
+      "available_mib": 4186
+    },
+    {
+      "time": 1794063715.510808,
+      "available_mib": 4191
+    },
+    {
+      "time": 1794063727.5150602,
+      "available_mib": 4182
+    },
+    {
+      "time": 1794063739.5185306,
+      "available_mib": 4226
+    },
+    {
+      "time": 1794063751.5221415,
+      "available_mib": 4186
+    },
+    {
+      "time": 1794063763.5267305,
+      "available_mib": 4199
+    },
+    {
+      "time": 1794063775.530817,
+      "available_mib": 4165
+    },
+    {
+      "time": 1794063787.5381129,
+      "available_mib": 4184
+    },
+    {
+      "time": 1794063799.5421088,
+      "available_mib": 4177
+    },
+    {
+      "time": 1794063811.5452023,
+      "available_mib": 4191
+    },
+    {
+      "time": 1794063823.5489278,
+      "available_mib": 4193
+    },
+    {
+      "time": 1794063835.55166,
+      "available_mib": 4184
+    },
+    {
+      "time": 1794063847.5556462,
+      "available_mib": 4177
+    },
+    {
+      "time": 1794063859.5593407,
+      "available_mib": 3913
+    },
+    {
+      "time": 1794063871.5641,
+      "available_mib": 4182
+    },
+    {
+      "time": 1794063883.5701885,
+      "available_mib": 4182
+    },
+    {
+      "time": 1794063895.5745597,
+      "available_mib": 4187
+    },
+    {
+      "time": 1794063907.5776744,
+      "available_mib": 4194
+    },
+    {
+      "time": 1794063919.5808678,
+      "available_mib": 4179
+    },
+    {
+      "time": 1794063931.5863078,
+      "available_mib": 4188
+    },
+    {
+      "time": 1794063943.5902772,
+      "available_mib": 4183
+    },
+    {
+      "time": 1794063955.5945096,
+      "available_mib": 4179
+    },
+    {
+      "time": 1794063967.5982769,
+      "available_mib": 4195
+    },
+    {
+      "time": 1794063979.6017644,
+      "available_mib": 4183
+    },
+    {
+      "time": 1794063991.6051164,
+      "available_mib": 3699
+    },
+    {
+      "time": 1794064003.6101263,
+      "available_mib": 4184
+    },
+    {
+      "time": 1794064015.6140237,
+      "available_mib": 4187
+    },
+    {
+      "time": 1794064027.6178346,
+      "available_mib": 4183
+    },
+    {
+      "time": 1794064039.6209388,
+      "available_mib": 3672
+    },
+    {
+      "time": 1794064051.6247299,
+      "available_mib": 4151
+    },
+    {
+      "time": 1794064063.6279483,
+      "available_mib": 4115
+    },
+    {
+      "time": 1794064075.6327522,
+      "available_mib": 4110
+    },
+    {
+      "time": 1794064087.636756,
+      "available_mib": 4121
+    },
+    {
+      "time": 1794064099.6411326,
+      "available_mib": 4121
+    },
+    {
+      "time": 1794064111.6451104,
+      "available_mib": 4125
+    },
+    {
+      "time": 1794064123.6501606,
+      "available_mib": 4101
+    },
+    {
+      "time": 1794064135.6546285,
+      "available_mib": 4135
+    },
+    {
+      "time": 1794064147.657876,
+      "available_mib": 4109
+    },
+    {
+      "time": 1794064159.6612172,
+      "available_mib": 4170
+    },
+    {
+      "time": 1794064171.6645522,
+      "available_mib": 4167
+    },
+    {
+      "time": 1794064183.6673467,
+      "available_mib": 3759
+    },
+    {
+      "time": 1794064195.6717482,
+      "available_mib": 4253
+    },
+    {
+      "time": 1794064207.6768024,
+      "available_mib": 4221
+    },
+    {
+      "time": 1794064219.6799812,
+      "available_mib": 3746
+    },
+    {
+      "time": 1794064231.683338,
+      "available_mib": 4215
+    },
+    {
+      "time": 1794064243.6879122,
+      "available_mib": 4206
+    },
+    {
+      "time": 1794064255.6954958,
+      "available_mib": 4223
+    },
+    {
+      "time": 1794064267.6994493,
+      "available_mib": 4198
+    },
+    {
+      "time": 1794064279.7031946,
+      "available_mib": 4221
+    },
+    {
+      "time": 1794064291.7065806,
+      "available_mib": 4237
+    },
+    {
+      "time": 1794064303.7100072,
+      "available_mib": 4230
+    },
+    {
+      "time": 1794064315.7132728,
+      "available_mib": 4176
+    },
+    {
+      "time": 1794064327.7179396,
+      "available_mib": 4204
+    },
+    {
+      "time": 1794064339.7242541,
+      "available_mib": 4216
+    },
+    {
+      "time": 1794064351.7276664,
+      "available_mib": 4215
+    },
+    {
+      "time": 1794064363.731557,
+      "available_mib": 4193
+    },
+    {
+      "time": 1794064375.7351847,
+      "available_mib": 4213
+    },
+    {
+      "time": 1794064387.7392535,
+      "available_mib": 4204
+    },
+    {
+      "time": 1794064399.7434406,
+      "available_mib": 4213
+    },
+    {
+      "time": 1794064411.7470233,
+      "available_mib": 4164
+    },
+    {
+      "time": 1794064423.7503772,
+      "available_mib": 4195
+    },
+    {
+      "time": 1794064435.7554152,
+      "available_mib": 4193
+    },
+    {
+      "time": 1794064447.7591877,
+      "available_mib": 4236
+    },
+    {
+      "time": 1794064459.7623324,
+      "available_mib": 4196
+    },
+    {
+      "time": 1794064471.7654564,
+      "available_mib": 4164
+    },
+    {
+      "time": 1794064483.769443,
+      "available_mib": 4152
+    },
+    {
+      "time": 1794064495.7733197,
+      "available_mib": 4180
+    },
+    {
+      "time": 1794064507.7779098,
+      "available_mib": 4174
+    },
+    {
+      "time": 1794064519.7822206,
+      "available_mib": 4153
+    },
+    {
+      "time": 1794064531.7853038,
+      "available_mib": 4184
+    },
+    {
+      "time": 1794064543.7894928,
+      "available_mib": 4158
+    },
+    {
+      "time": 1794064555.7950983,
+      "available_mib": 4190
+    },
+    {
+      "time": 1794064567.7991514,
+      "available_mib": 4214
+    },
+    {
+      "time": 1794064579.8035123,
+      "available_mib": 4194
+    },
+    {
+      "time": 1794064591.8069,
+      "available_mib": 4171
+    },
+    {
+      "time": 1794064603.8108778,
+      "available_mib": 4172
+    },
+    {
+      "time": 1794064615.8174188,
+      "available_mib": 4174
+    },
+    {
+      "time": 1794064627.8208363,
+      "available_mib": 4192
+    },
+    {
+      "time": 1794064639.8242157,
+      "available_mib": 4197
+    },
+    {
+      "time": 1794064651.8274152,
+      "available_mib": 4198
+    },
+    {
+      "time": 1794064663.8318272,
+      "available_mib": 4201
+    },
+    {
+      "time": 1794064675.8366592,
+      "available_mib": 4192
+    },
+    {
+      "time": 1794064687.840949,
+      "available_mib": 4189
+    },
+    {
+      "time": 1794064699.844683,
+      "available_mib": 3704
+    },
+    {
+      "time": 1794064711.847961,
+      "available_mib": 4164
+    },
+    {
+      "time": 1794064723.851855,
+      "available_mib": 4181
+    },
+    {
+      "time": 1794064735.857495,
+      "available_mib": 4208
+    },
+    {
+      "time": 1794064747.861158,
+      "available_mib": 4171
+    },
+    {
+      "time": 1794064759.8643475,
+      "available_mib": 4208
+    },
+    {
+      "time": 1794064771.8680973,
+      "available_mib": 4174
+    },
+    {
+      "time": 1794064783.8752282,
+      "available_mib": 4183
+    },
+    {
+      "time": 1794064795.879469,
+      "available_mib": 4190
+    },
+    {
+      "time": 1794064807.883746,
+      "available_mib": 4202
+    },
+    {
+      "time": 1794064819.8872547,
+      "available_mib": 4178
+    },
+    {
+      "time": 1794064831.8909464,
+      "available_mib": 4163
+    },
+    {
+      "time": 1794064843.896954,
+      "available_mib": 4206
+    },
+    {
+      "time": 1794064855.901043,
+      "available_mib": 4215
+    },
+    {
+      "time": 1794064867.9055274,
+      "available_mib": 4220
+    },
+    {
+      "time": 1794064879.9096763,
+      "available_mib": 4206
+    },
+    {
+      "time": 1794064891.9128292,
+      "available_mib": 4215
+    },
+    {
+      "time": 1794064903.9163396,
+      "available_mib": 4162
+    },
+    {
+      "time": 1794064915.919935,
+      "available_mib": 4198
+    },
+    {
+      "time": 1794064927.9233177,
+      "available_mib": 4176
+    },
+    {
+      "time": 1794064939.9275274,
+      "available_mib": 4190
+    },
+    {
+      "time": 1794064951.931553,
+      "available_mib": 4191
+    },
+    {
+      "time": 1794064963.9351168,
+      "available_mib": 4181
+    },
+    {
+      "time": 1794064975.9460678,
+      "available_mib": 4203
+    },
+    {
+      "time": 1794064987.9496832,
+      "available_mib": 4191
+    },
+    {
+      "time": 1794064999.9537892,
+      "available_mib": 4194
+    },
+    {
+      "time": 1794065011.9580936,
+      "available_mib": 4180
+    },
+    {
+      "time": 1794065023.9619796,
+      "available_mib": 4156
+    },
+    {
+      "time": 1794065035.966586,
+      "available_mib": 4152
+    },
+    {
+      "time": 1794065047.97404,
+      "available_mib": 4166
+    },
+    {
+      "time": 1794065059.977962,
+      "available_mib": 4186
+    },
+    {
+      "time": 1794065071.9817288,
+      "available_mib": 4194
+    },
+    {
+      "time": 1794065083.9855692,
+      "available_mib": 4208
+    },
+    {
+      "time": 1794065095.9915469,
+      "available_mib": 4179
+    },
+    {
+      "time": 1794065107.9965086,
+      "available_mib": 4140
+    },
+    {
+      "time": 1794065120.0011163,
+      "available_mib": 4183
+    },
+    {
+      "time": 1794065132.0054388,
+      "available_mib": 4188
+    },
+    {
+      "time": 1794065144.0096884,
+      "available_mib": 4210
+    },
+    {
+      "time": 1794065156.013361,
+      "available_mib": 4195
+    },
+    {
+      "time": 1794065168.016959,
+      "available_mib": 4173
+    },
+    {
+      "time": 1794065180.0205798,
+      "available_mib": 4200
+    },
+    {
+      "time": 1794065192.02525,
+      "available_mib": 4194
+    },
+    {
+      "time": 1794065204.047042,
+      "available_mib": 4121
+    },
+    {
+      "time": 1794065216.0520115,
+      "available_mib": 4178
+    },
+    {
+      "time": 1794065228.0585139,
+      "available_mib": 4185
+    },
+    {
+      "time": 1794065240.0632858,
+      "available_mib": 4126
+    },
+    {
+      "time": 1794065252.0681634,
+      "available_mib": 4162
+    },
+    {
+      "time": 1794065264.0714445,
+      "available_mib": 4157
+    },
+    {
+      "time": 1794065276.0747433,
+      "available_mib": 4210
+    },
+    {
+      "time": 1794065288.082102,
+      "available_mib": 4167
+    },
+    {
+      "time": 1794065300.0933342,
+      "available_mib": 4160
+    },
+    {
+      "time": 1794065312.1042395,
+      "available_mib": 4175
+    },
+    {
+      "time": 1794065324.115206,
+      "available_mib": 4166
+    },
+    {
+      "time": 1794065336.1195295,
+      "available_mib": 4154
+    },
+    {
+      "time": 1794065348.1312053,
+      "available_mib": 4172
+    },
+    {
+      "time": 1794065360.1355572,
+      "available_mib": 4168
+    },
+    {
+      "time": 1794065372.1398952,
+      "available_mib": 4142
+    },
+    {
+      "time": 1794065384.1451683,
+      "available_mib": 4132
+    },
+    {
+      "time": 1794065396.1491854,
+      "available_mib": 4161
+    },
+    {
+      "time": 1794065408.153018,
+      "available_mib": 4157
+    },
+    {
+      "time": 1794065420.1566057,
+      "available_mib": 4178
+    },
+    {
+      "time": 1794065432.1607637,
+      "available_mib": 3674
+    },
+    {
+      "time": 1794065444.166591,
+      "available_mib": 4193
+    },
+    {
+      "time": 1794065456.1726208,
+      "available_mib": 4125
+    },
+    {
+      "time": 1794065468.177851,
+      "available_mib": 4156
+    },
+    {
+      "time": 1794065480.1824245,
+      "available_mib": 4159
+    },
+    {
+      "time": 1794065492.1872985,
+      "available_mib": 4171
+    },
+    {
+      "time": 1794065504.195546,
+      "available_mib": 4166
+    },
+    {
+      "time": 1794065516.2041032,
+      "available_mib": 4172
+    },
+    {
+      "time": 1794065528.2150564,
+      "available_mib": 4151
+    },
+    {
+      "time": 1794065540.2261834,
+      "available_mib": 4132
+    },
+    {
+      "time": 1794065552.2303467,
+      "available_mib": 4157
+    },
+    {
+      "time": 1794065564.2337985,
+      "available_mib": 4200
+    },
+    {
+      "time": 1794065576.2454708,
+      "available_mib": 4205
+    },
+    {
+      "time": 1794065588.2526143,
+      "available_mib": 3796
+    },
+    {
+      "time": 1794065600.2601156,
+      "available_mib": 3696
+    },
+    {
+      "time": 1794065612.2653751,
+      "available_mib": 4175
+    },
+    {
+      "time": 1794065624.2733026,
+      "available_mib": 4187
+    },
+    {
+      "time": 1794065636.2786546,
+      "available_mib": 4182
+    },
+    {
+      "time": 1794065648.2836003,
+      "available_mib": 4192
+    },
+    {
+      "time": 1794065660.288964,
+      "available_mib": 4177
+    },
+    {
+      "time": 1794065672.2955892,
+      "available_mib": 4161
+    },
+    {
+      "time": 1794065684.2995405,
+      "available_mib": 4195
+    },
+    {
+      "time": 1794065696.3089073,
+      "available_mib": 4189
+    },
+    {
+      "time": 1794065708.3132844,
+      "available_mib": 4189
+    },
+    {
+      "time": 1794065720.3168614,
+      "available_mib": 3682
+    },
+    {
+      "time": 1794065732.321507,
+      "available_mib": 4174
+    },
+    {
+      "time": 1794065744.3301444,
+      "available_mib": 4198
+    },
+    {
+      "time": 1794065756.3425703,
+      "available_mib": 4201
+    },
+    {
+      "time": 1794065768.3538818,
+      "available_mib": 4191
+    },
+    {
+      "time": 1794065780.361791,
+      "available_mib": 4193
+    },
+    {
+      "time": 1794065792.3701425,
+      "available_mib": 4200
+    },
+    {
+      "time": 1794065804.3736546,
+      "available_mib": 4188
+    },
+    {
+      "time": 1794065816.3770504,
+      "available_mib": 4203
+    },
+    {
+      "time": 1794065828.3804803,
+      "available_mib": 4204
+    },
+    {
+      "time": 1794065840.3836904,
+      "available_mib": 3697
+    },
+    {
+      "time": 1794065852.3881295,
+      "available_mib": 4170
+    },
+    {
+      "time": 1794065864.3926098,
+      "available_mib": 4186
+    },
+    {
+      "time": 1794065876.3966298,
+      "available_mib": 4160
+    },
+    {
+      "time": 1794065888.4033687,
+      "available_mib": 4157
+    },
+    {
+      "time": 1794065900.4083278,
+      "available_mib": 4168
+    },
+    {
+      "time": 1794065912.413161,
+      "available_mib": 4172
+    },
+    {
+      "time": 1794065924.4214962,
+      "available_mib": 4199
+    },
+    {
+      "time": 1794065936.425011,
+      "available_mib": 4175
+    },
+    {
+      "time": 1794065948.4294682,
+      "available_mib": 4167
+    },
+    {
+      "time": 1794065960.4367785,
+      "available_mib": 4164
+    },
+    {
+      "time": 1794065972.4403887,
+      "available_mib": 4187
+    },
+    {
+      "time": 1794065984.4437442,
+      "available_mib": 4186
+    },
+    {
+      "time": 1794065996.4471865,
+      "available_mib": 4185
+    },
+    {
+      "time": 1794066008.45262,
+      "available_mib": 4191
+    },
+    {
+      "time": 1794066020.4562263,
+      "available_mib": 4186
+    },
+    {
+      "time": 1794066032.4596372,
+      "available_mib": 4176
+    },
+    {
+      "time": 1794066044.4656847,
+      "available_mib": 4199
+    },
+    {
+      "time": 1794066056.4715145,
+      "available_mib": 4143
+    },
+    {
+      "time": 1794066068.4762852,
+      "available_mib": 4168
+    },
+    {
+      "time": 1794066080.480448,
+      "available_mib": 4179
+    },
+    {
+      "time": 1794066092.4848025,
+      "available_mib": 4183
+    },
+    {
+      "time": 1794066104.4913483,
+      "available_mib": 4170
+    },
+    {
+      "time": 1794066116.4953024,
+      "available_mib": 4156
+    },
+    {
+      "time": 1794066128.4990144,
+      "available_mib": 4147
+    },
+    {
+      "time": 1794066140.5027213,
+      "available_mib": 4164
+    },
+    {
+      "time": 1794066152.507661,
+      "available_mib": 3831
+    },
+    {
+      "time": 1794066164.5130925,
+      "available_mib": 7770
+    },
+    {
+      "time": 1794066176.5164988,
+      "available_mib": 7782
+    },
+    {
+      "time": 1794066188.5197053,
+      "available_mib": 7794
+    },
+    {
+      "time": 1794066200.523363,
+      "available_mib": 7797
+    },
+    {
+      "time": 1794066212.5266771,
+      "available_mib": 7785
+    },
+    {
+      "time": 1794066224.53179,
+      "available_mib": 7792
+    },
+    {
+      "time": 1794066236.5355277,
+      "available_mib": 7806
+    },
+    {
+      "time": 1794066248.5396335,
+      "available_mib": 7809
+    },
+    {
+      "time": 1794066260.5429566,
+      "available_mib": 7786
+    },
+    {
+      "time": 1794066272.5461783,
+      "available_mib": 7776
+    },
+    {
+      "time": 1794066284.5493302,
+      "available_mib": 7807
+    },
+    {
+      "time": 1794066296.5524688,
+      "available_mib": 7811
+    },
+    {
+      "time": 1794066308.5586317,
+      "available_mib": 7819
+    },
+    {
+      "time": 1794066320.5617573,
+      "available_mib": 7790
+    },
+    {
+      "time": 1794066332.5663471,
+      "available_mib": 7796
+    },
+    {
+      "time": 1794066344.5696483,
+      "available_mib": 7798
+    },
+    {
+      "time": 1794066356.5748906,
+      "available_mib": 7813
+    },
+    {
+      "time": 1794066368.5786345,
+      "available_mib": 7815
+    },
+    {
+      "time": 1794066380.5824034,
+      "available_mib": 7810
+    },
+    {
+      "time": 1794066392.586928,
+      "available_mib": 7783
+    },
+    {
+      "time": 1794066404.5905433,
+      "available_mib": 7805
+    },
+    {
+      "time": 1794066416.5936954,
+      "available_mib": 7811
+    },
+    {
+      "time": 1794066428.5977616,
+      "available_mib": 7810
+    },
+    {
+      "time": 1794066440.6018376,
+      "available_mib": 7806
+    },
+    {
+      "time": 1794066452.6055224,
+      "available_mib": 7289
+    },
+    {
+      "time": 1794066464.6088607,
+      "available_mib": 7797
+    },
+    {
+      "time": 1794066476.6122832,
+      "available_mib": 7770
+    },
+    {
+      "time": 1794066488.6175148,
+      "available_mib": 7791
+    },
+    {
+      "time": 1794066500.6222224,
+      "available_mib": 7802
+    },
+    {
+      "time": 1794066512.6254973,
+      "available_mib": 7770
+    },
+    {
+      "time": 1794066524.6299682,
+      "available_mib": 7747
+    },
+    {
+      "time": 1794066536.6337867,
+      "available_mib": 7808
+    },
+    {
+      "time": 1794066548.6371436,
+      "available_mib": 7823
+    },
+    {
+      "time": 1794066560.6421258,
+      "available_mib": 7816
+    },
+    {
+      "time": 1794066572.6455843,
+      "available_mib": 7822
+    },
+    {
+      "time": 1794066584.648792,
+      "available_mib": 7824
+    },
+    {
+      "time": 1794066596.6524825,
+      "available_mib": 7824
+    },
+    {
+      "time": 1794066608.6563914,
+      "available_mib": 7823
+    },
+    {
+      "time": 1794066620.6600316,
+      "available_mib": 7818
+    },
+    {
+      "time": 1794066632.6645749,
+      "available_mib": 7801
+    },
+    {
+      "time": 1794066644.6681073,
+      "available_mib": 7769
+    },
+    {
+      "time": 1794066656.6730857,
+      "available_mib": 7805
+    },
+    {
+      "time": 1794066668.6768787,
+      "available_mib": 7814
+    },
+    {
+      "time": 1794066680.6830144,
+      "available_mib": 7818
+    },
+    {
+      "time": 1794066692.6861928,
+      "available_mib": 7810
+    },
+    {
+      "time": 1794066704.689416,
+      "available_mib": 7777
+    },
+    {
+      "time": 1794066716.6941,
+      "available_mib": 7803
+    },
+    {
+      "time": 1794066728.698431,
+      "available_mib": 7810
+    },
+    {
+      "time": 1794066740.7017817,
+      "available_mib": 7804
+    },
+    {
+      "time": 1794066752.707774,
+      "available_mib": 7804
+    }
+  ],
+  "first_iteration_memory_checked": true,
+  "memory_after_both_first_iterations": "               total        used        free      shared  buff/cache   available\nMem:           15843       11542        1121        2995        6415        4301\nSwap:           4096        3038        1057\n",
+  "training_completed_at": 1794066761.7558308,
+  "comparisons": [
+    {
+      "checkpoint_a": "checkpoints/run-medium-explore/selfplay-1794066157612533050.pt",
+      "checkpoint_b": "checkpoints/run-medium/selfplay-1794066758193997836.pt",
+      "games": 200,
+      "layouts": 100,
+      "wins": 88,
+      "win_rate": 0.44,
+      "paired_bootstrap_95": [
+        0.37,
+        0.515
+      ],
+      "pair_sweeps": 23,
+      "pair_splits": 42,
+      "pair_losses": 35,
+      "seed": 7310000,
+      "mode": "greedy",
+      "mode_b": "greedy",
+      "sims": 0,
+      "sims_b": 100,
+      "c_puct": 1.5,
+      "gumbel_noise": false,
+      "fpu_reduction": 0.2,
+      "leaf_batch_size": [
+        4,
+        4
+      ],
+      "tree_reuse": [
+        false,
+        false
+      ],
+      "moves": [
+        9720,
+        9949
+      ],
+      "side_seconds": [
+        6.130162208457477,
+        5.658883049036376
+      ],
+      "mean_seconds_per_move": [
+        0.000630675124326901,
+        0.0005687891294639036
+      ],
+      "seconds": 12.178394341957755,
+      "name": "treatment-control-greedy",
+      "argv": [
+        "uv",
+        "run",
+        "python",
+        "-m",
+        "msflags.compare",
+        "--checkpoint-a",
+        "checkpoints/run-medium-explore/selfplay-1794066157612533050.pt",
+        "--checkpoint-b",
+        "checkpoints/run-medium/selfplay-1794066758193997836.pt",
+        "--mode",
+        "greedy",
+        "--sims",
+        "100",
+        "--leaf-batch-size",
+        "4",
+        "--no-tree-reuse",
+        "--no-tree-reuse-b",
+        "--games",
+        "200",
+        "--seed",
+        "7310000",
+        "--device",
+        "cuda",
+        "--threads",
+        "1"
+      ],
+      "started_at": 1794066761.756551,
+      "finished_at": 1794066776.4252558
+    },
+    {
+      "checkpoint_a": "checkpoints/run-medium-explore/selfplay-1794066157612533050.pt",
+      "checkpoint_b": "checkpoints/run-medium/selfplay-1794066758193997836.pt",
+      "games": 200,
+      "layouts": 100,
+      "wins": 90,
+      "win_rate": 0.45,
+      "paired_bootstrap_95": [
+        0.38,
+        0.52
+      ],
+      "pair_sweeps": 21,
+      "pair_splits": 48,
+      "pair_losses": 31,
+      "seed": 7320000,
+      "mode": "mcts",
+      "mode_b": "mcts",
+      "sims": 100,
+      "sims_b": 100,
+      "c_puct": 1.5,
+      "gumbel_noise": false,
+      "fpu_reduction": 0.2,
+      "leaf_batch_size": [
+        4,
+        4
+      ],
+      "tree_reuse": [
+        false,
+        false
+      ],
+      "moves": [
+        9559,
+        9703
+      ],
+      "side_seconds": [
+        405.6749560656026,
+        406.5509902490303
+      ],
+      "mean_seconds_per_move": [
+        0.04243905806732949,
+        0.04189951460878391
+      ],
+      "seconds": 812.6480839260621,
+      "name": "treatment-control-mcts",
+      "argv": [
+        "uv",
+        "run",
+        "python",
+        "-m",
+        "msflags.compare",
+        "--checkpoint-a",
+        "checkpoints/run-medium-explore/selfplay-1794066157612533050.pt",
+        "--checkpoint-b",
+        "checkpoints/run-medium/selfplay-1794066758193997836.pt",
+        "--mode",
+        "mcts",
+        "--sims",
+        "100",
+        "--leaf-batch-size",
+        "4",
+        "--no-tree-reuse",
+        "--no-tree-reuse-b",
+        "--games",
+        "200",
+        "--seed",
+        "7320000",
+        "--device",
+        "cuda",
+        "--threads",
+        "1"
+      ],
+      "started_at": 1794066776.4257305,
+      "finished_at": 1794067590.6375394
+    },
+    {
+      "checkpoint_a": "checkpoints/run-medium-explore/selfplay-1794066157612533050.pt",
+      "checkpoint_b": "checkpoints/explore-start/trial-start.pt",
+      "games": 200,
+      "layouts": 100,
+      "wins": 88,
+      "win_rate": 0.44,
+      "paired_bootstrap_95": [
+        0.375,
+        0.505
+      ],
+      "pair_sweeps": 18,
+      "pair_splits": 52,
+      "pair_losses": 30,
+      "seed": 7330000,
+      "mode": "greedy",
+      "mode_b": "greedy",
+      "sims": 0,
+      "sims_b": 100,
+      "c_puct": 1.5,
+      "gumbel_noise": false,
+      "fpu_reduction": 0.2,
+      "leaf_batch_size": [
+        4,
+        4
+      ],
+      "tree_reuse": [
+        false,
+        false
+      ],
+      "moves": [
+        9804,
+        9899
+      ],
+      "side_seconds": [
+        6.364293946069665,
+        5.70855751959607
+      ],
+      "mean_seconds_per_move": [
+        0.0006491527892767917,
+        0.0005766802222038661
+      ],
+      "seconds": 12.414619716000743,
+      "name": "treatment-start-greedy",
+      "argv": [
+        "uv",
+        "run",
+        "python",
+        "-m",
+        "msflags.compare",
+        "--checkpoint-a",
+        "checkpoints/run-medium-explore/selfplay-1794066157612533050.pt",
+        "--checkpoint-b",
+        "checkpoints/explore-start/trial-start.pt",
+        "--mode",
+        "greedy",
+        "--sims",
+        "100",
+        "--leaf-batch-size",
+        "4",
+        "--no-tree-reuse",
+        "--no-tree-reuse-b",
+        "--games",
+        "200",
+        "--seed",
+        "7330000",
+        "--device",
+        "cuda",
+        "--threads",
+        "1"
+      ],
+      "started_at": 1794067590.63795,
+      "finished_at": 1794067604.5289707
+    },
+    {
+      "checkpoint_a": "checkpoints/run-medium/selfplay-1794066758193997836.pt",
+      "checkpoint_b": "checkpoints/explore-start/trial-start.pt",
+      "games": 200,
+      "layouts": 100,
+      "wins": 102,
+      "win_rate": 0.51,
+      "paired_bootstrap_95": [
+        0.45,
+        0.57
+      ],
+      "pair_sweeps": 19,
+      "pair_splits": 64,
+      "pair_losses": 17,
+      "seed": 7340000,
+      "mode": "greedy",
+      "mode_b": "greedy",
+      "sims": 0,
+      "sims_b": 100,
+      "c_puct": 1.5,
+      "gumbel_noise": false,
+      "fpu_reduction": 0.2,
+      "leaf_batch_size": [
+        4,
+        4
+      ],
+      "tree_reuse": [
+        false,
+        false
+      ],
+      "moves": [
+        10116,
+        10120
+      ],
+      "side_seconds": [
+        6.436970931128599,
+        5.58480151835829
+      ],
+      "mean_seconds_per_move": [
+        0.000636315829490767,
+        0.0005518578575452855
+      ],
+      "seconds": 12.389437759993598,
+      "name": "control-start-greedy",
+      "argv": [
+        "uv",
+        "run",
+        "python",
+        "-m",
+        "msflags.compare",
+        "--checkpoint-a",
+        "checkpoints/run-medium/selfplay-1794066758193997836.pt",
+        "--checkpoint-b",
+        "checkpoints/explore-start/trial-start.pt",
+        "--mode",
+        "greedy",
+        "--sims",
+        "100",
+        "--leaf-batch-size",
+        "4",
+        "--no-tree-reuse",
+        "--no-tree-reuse-b",
+        "--games",
+        "200",
+        "--seed",
+        "7340000",
+        "--device",
+        "cuda",
+        "--threads",
+        "1"
+      ],
+      "started_at": 1794067604.5294297,
+      "finished_at": 1794067618.3472612
+    }
+  ],
+  "comparisons_completed_at": 1794067618.3477192,
+  "decision": {
+    "chosen_arm": "control",
+    "reason": "Treatment MCTS 45.0% (paired bootstrap 95% 38\u201352%) and greedy 44.0% (37\u201351.5%): no credible advantage. Keep alpha .15, fraction .25, temperature_moves 30.",
+    "confirmation": "Not triggered: initial primary MCTS point estimate is below 50%, not borderline-positive.",
+    "promoted_checkpoint": "checkpoints/run-medium/selfplay-1794066758193997836.pt",
+    "promoted_generation_ids": [
+      "r64x4-bs8k-sp181.greedy",
+      "r64x4-bs8k-sp181.mcts100-c1.5"
+    ],
+    "final_checkpoint_sha256": "b507d3ac08e69e27abc4a7b69e8712847ac7cba1a475c2845f3303c93d70cb49",
+    "continued_training": false
+  },
+  "diagnostics_summary": "checkpoints/explore-results/summary.json",
+  "source_file_sha256": {
+    "msflags/train.py": "53cd1e215947bb92a578ce07970be689c8f49dad621085fb6793e6042e91b63e",
+    "msflags/mcts.py": "77bef0391120f6d62bab16b4082475d80099458add1e40c89357155052cb91de",
+    "tests/test_training_metrics.py": "a30b2c5c9a70984fd21a3f9588694e997e252de0dd30cfd446b69d5bbb590728"
+  },
+  "finished_at": 1794067795.3433352
+}

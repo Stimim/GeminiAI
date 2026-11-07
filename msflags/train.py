@@ -221,6 +221,8 @@ def selfplay_batch(args, evaluator, seed):
     roots = [None] * len(games)
     moves = [0] * len(games)
     action_counts = [dict(bomb=0, safe=0, mine=0) for _ in games]
+    entropy_sum = effective_actions_sum = 0.0
+    prior_disagreements = 0
     active = list(range(len(games)))
     start = time.monotonic()
     while active:
@@ -236,6 +238,10 @@ def selfplay_batch(args, evaluator, seed):
         for i, s in zip(active, searches):
             g = games[i]
             pi = s.improved_policy().astype(np.float32)
+            positive = pi[pi > 0].astype(np.float64)
+            entropy = float(-np.dot(positive, np.log(positive)))
+            entropy_sum += entropy
+            effective_actions_sum += float(np.exp(entropy))
             histories[i].append(Position(g.board.copy(), list(g.scores), g.to_move, pi,
                                          s.analysis.probs.astype(np.float32), bombs=list(g.bombs)))
             if moves[i] < args.temperature_moves and args.temperature > 0:
@@ -243,6 +249,7 @@ def selfplay_batch(args, evaluator, seed):
                 action = int(rng.choice(len(pi), p=weights / weights.sum()))
             else:
                 action = s.best_action()
+            prior_disagreements += int(action != s.root.prior_argmax)
             kind = 'bomb' if action >= cfg.n else 'mine' if g.mines[action] else 'safe'
             action_counts[i][kind] += 1
             g.step(action)
@@ -259,6 +266,12 @@ def selfplay_batch(args, evaluator, seed):
     log(args, 'selfplay_games', games=len(games), positions=len(positions),
         games_per_second=len(games)/(time.monotonic()-start),
         split=getattr(args, 'generation_split', 'replay'),
+        policy_target_entropy=entropy_sum / len(positions),
+        policy_target_effective_actions=effective_actions_sum / len(positions),
+        played_not_prior_argmax=prior_disagreements,
+        played_not_prior_argmax_fraction=prior_disagreements / len(positions),
+        mean_game_length=len(positions) / len(games),
+        bombs_per_game=sum(counts['bomb'] for counts in action_counts) / len(games),
         game_statistics=[dict(moves=sum(counts.values()), **counts) for counts in action_counts],
         action_counts={kind: sum(counts[kind] for counts in action_counts)
                        for kind in ('bomb', 'safe', 'mine')})

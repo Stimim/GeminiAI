@@ -21,12 +21,13 @@ from .solver import Analysis
 
 
 class Node:
-    __slots__ = ("to_move", "actions", "prior", "N", "W", "R", "children", "value", "public_key")
+    __slots__ = ("to_move", "actions", "prior", "prior_argmax", "N", "W", "R", "children", "value", "public_key")
 
     def __init__(self, to_move: int):
         self.to_move = to_move
         self.actions: np.ndarray | None = None  # legal actions; None = unexpanded
         self.prior: np.ndarray | None = None
+        self.prior_argmax: int | None = None  # clean network choice, before root noise
         self.N: np.ndarray | None = None
         self.W: np.ndarray | None = None
         self.R: np.ndarray | None = None  # in-flight virtual visits, never real statistics
@@ -39,6 +40,7 @@ class Node:
         p = policy[self.actions].astype(np.float64)
         s = p.sum()
         self.prior = p / s if s > 0 else np.full(len(p), 1.0 / len(p))
+        self.prior_argmax = int(self.actions[np.argmax(self.prior)])
         self.N = np.zeros(len(self.actions))
         self.W = np.zeros(len(self.actions))
         self.R = np.zeros(len(self.actions))

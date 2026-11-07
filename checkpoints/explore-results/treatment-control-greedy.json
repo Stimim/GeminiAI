@@ -1,0 +1,74 @@
+{
+  "checkpoint_a": "checkpoints/run-medium-explore/selfplay-1794066157612533050.pt",
+  "checkpoint_b": "checkpoints/run-medium/selfplay-1794066758193997836.pt",
+  "games": 200,
+  "layouts": 100,
+  "wins": 88,
+  "win_rate": 0.44,
+  "paired_bootstrap_95": [
+    0.37,
+    0.515
+  ],
+  "pair_sweeps": 23,
+  "pair_splits": 42,
+  "pair_losses": 35,
+  "seed": 7310000,
+  "mode": "greedy",
+  "mode_b": "greedy",
+  "sims": 0,
+  "sims_b": 100,
+  "c_puct": 1.5,
+  "gumbel_noise": false,
+  "fpu_reduction": 0.2,
+  "leaf_batch_size": [
+    4,
+    4
+  ],
+  "tree_reuse": [
+    false,
+    false
+  ],
+  "moves": [
+    9720,
+    9949
+  ],
+  "side_seconds": [
+    6.130162208457477,
+    5.658883049036376
+  ],
+  "mean_seconds_per_move": [
+    0.000630675124326901,
+    0.0005687891294639036
+  ],
+  "seconds": 12.178394341957755,
+  "name": "treatment-control-greedy",
+  "argv": [
+    "uv",
+    "run",
+    "python",
+    "-m",
+    "msflags.compare",
+    "--checkpoint-a",
+    "checkpoints/run-medium-explore/selfplay-1794066157612533050.pt",
+    "--checkpoint-b",
+    "checkpoints/run-medium/selfplay-1794066758193997836.pt",
+    "--mode",
+    "greedy",
+    "--sims",
+    "100",
+    "--leaf-batch-size",
+    "4",
+    "--no-tree-reuse",
+    "--no-tree-reuse-b",
+    "--games",
+    "200",
+    "--seed",
+    "7310000",
+    "--device",
+    "cuda",
+    "--threads",
+    "1"
+  ],
+  "started_at": 1794066761.756551,
+  "finished_at": 1794066776.4252558
+}

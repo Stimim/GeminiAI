@@ -167,7 +167,104 @@ Never overwrite, rename or repoint pinned weights: historical results are keyed 
 
 `checkpoints/run-medium/` (64×4) and `checkpoints/run-small/` (32×3) resume existing optimizer, replay, and iteration counters. The output directory's `latest.pt` always takes precedence over `--checkpoint`. `--iterations 0` is open-ended; positive values are total target iteration numbers, not additional iterations. Interrupted unpublished work is regenerated; the command's learning rate overrides the restored optimizer learning rate.
 
-### Round 3: active control continuations
+### Exploration trial: medium g161 → g181
+
+**Outcome: retain control exploration; no credible strength improvement.**
+
+The medium-only controlled continuation started from an exact copy of published
+g161, including optimizer state and all 50,000 replay positions. The independent
+start snapshot is `checkpoints/explore-start/trial-start.pt`; checkpoint and
+replay SHA-256 equality across the source, snapshot and treatment was checked
+before either trainer launched. `checkpoints/explore-trial.json` records hashes,
+exact argv, process groups, first-iteration memory observations and results.
+
+| Arm | Directory | Dirichlet alpha / fraction | Temperature-1 moves |
+|---|---|---|---:|
+| Control | `checkpoints/run-medium` | .15 / .25 | 30 |
+| Treatment | `checkpoints/run-medium-explore` | .03 / .25 | 60 |
+
+Both stop at **g181** (20 additional iterations), with seed610000, lr2e-4,
+value weight .25, PUCT-100/K4/tree reuse, 96 games, 300×128 updates and 50k replay.
+Each has four CPU-only workers and one trainer thread, sharing its parent's GPU
+evaluator (`--cpu-share 5`). No small-network run or other experiment is started.
+Available RAM was **11,391 MiB before launch**; the observer checks again after
+each first iteration and reduces both arms equally to three workers if the
+post-first-iteration headroom falls below 3 GiB.
+
+Self-play metrics now include target entropy (natural-log units), effective
+actions (`exp(entropy)` averaged over positions), played-action disagreement
+with the **clean, pre-noise network-prior argmax**, mean game length and bombs
+per game. Terminal actions are included; replay and held-out validation games
+remain separated. An expanded/reused node retains its original clean argmax,
+so injected root noise is not mistaken for the network's own choice.
+
+The predeclared decision uses at least 200 paired-seat games each for treatment
+versus control in greedy and fresh-tree/no-noise MCTS-100/K4, plus greedy
+comparisons of each arm with the frozen start. MCTS strength is primary; greedy
+strength and held-out value error are guardrails. A positive MCTS point estimate
+triggers an independent 400-game confirmation bank; overlapping 50% intervals
+do not establish a winner. Only the chosen immutable g181 checkpoint is promoted.
+
+Both detached arms completed all 20 iterations and stopped: control process
+group **1824420**, treatment **1824449**. On **2026-11-07 UTC**, both launched
+at **14:55:54**; treatment finished **15:42:37**, control **15:52:38**; all
+comparisons finished **16:06:58**. Wall times were **46m43s / 56m44s**
+(treatment/control). RAM after their first iterations was **4,754 / 4,301 MiB**;
+the ten-second observer's minimum was **3,672 MiB**, above the floor, so both
+retained four workers. Neither arm continued beyond g181.
+
+Diagnostics across **1,920 replay games per arm** (all 20 iterations):
+
+| Metric | Control | Treatment |
+|---|---:|---:|
+| Target entropy, nats / position | 1.573 | 1.721 |
+| Mean effective target actions / position | 6.197 | 7.153 |
+| Played action differs from clean prior argmax | 30.52% | 56.57% |
+| Mean game length, both players' moves | 91.16 | 71.09 |
+| Bombs used / game | 1.866 | 1.975 |
+| New replay positions | 175,018 | 136,486 |
+
+**Exploration changed substantially**, especially played-action disagreement
+(+26.05 percentage points), but did not establish better play. Games became
+shorter and bomb usage increased. Position weighting is used for entropy,
+effective support and disagreement; game weighting for length and bombs.
+`checkpoints/explore-results/summary.json` retains reconciled per-iteration
+diagnostics, held-out validation and final checkpoint hashes.
+
+Each comparison uses **200 games / 100 independently seeded layouts**, both
+seats per layout; intervals are whole-layout paired-bootstrap 95% CIs.
+MCTS uses fresh trees/no root noise, following the earlier trial protocol;
+training itself retains tree reuse.
+
+| First side versus second | Mode | First-side wins | Win rate [95% CI] | Fresh seed bank |
+|---|---|---:|---|---:|
+| Treatment g181 vs control g181 | Greedy | 88/200 | 44.0% [37.0–51.5%] | 7310000 |
+| Treatment g181 vs control g181 | MCTS-100/K4 | 90/200 | 45.0% [38.0–52.0%] | 7320000 |
+| Treatment g181 vs start g161 | Greedy | 88/200 | 44.0% [37.5–50.5%] | 7330000 |
+| Control g181 vs start g161 | Greedy | 102/200 | 51.0% [45.0–57.0%] | 7340000 |
+
+The primary treatment estimate is below 50%, not borderline-positive, so no
+confirmation bank was triggered. These intervals establish neither a treatment
+gain nor a definitive treatment regression. The start comparisons likewise do
+not establish improvement over g161.
+
+Held-out value validation used **16 fresh complete games per arm at g165,
+g170, g175 and g180**, never replayed. MSEs, control/treatment respectively:
+**.718/.793, .909/1.016, 1.041/1.298, .619/.883**. Last validation sign accuracy
+was **77.60% / 73.57%**, versus score-leader baselines **68.54% / 72.65%**;
+the zero predictor's MSE is 1. These are correlated positions from small game
+cohorts under each arm's different self-play distribution, not a common
+held-out corpus or independent-position significance test.
+
+**Decision:** keep alpha **.15**, fraction **.25**, temperature-1 for **30**
+combined moves. Registry CLI promoted only immutable control final
+`checkpoints/run-medium/selfplay-1794066758193997836.pt`, yielding
+**`r64x4-bs8k-sp181.greedy`** and **`r64x4-bs8k-sp181.mcts100-c1.5`**.
+The losing treatment final and independent start snapshot remain on disk.
+No further training or experiment was started.
+Final verification: `uv run pytest -q` — **196 passed in 28.66s**.
+
+### Round 3: historical control continuations
 
 The completed trial decision keeps both controls: medium resumes **g113** with
 lr **2e-4**, small resumes **g82** with lr **1e-3**; both use value weight **0.25**.

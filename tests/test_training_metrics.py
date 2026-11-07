@@ -37,6 +37,12 @@ def test_action_metrics_include_terminal_bombs_and_every_game(tmp_path, monkeypa
     assert metrics['positions'] == len(data['board']) == 2
     assert metrics['action_counts'] == dict(bomb=2, safe=0, mine=0)
     assert metrics['game_statistics'] == [dict(moves=1, bomb=1, safe=0, mine=0)] * 2
+    assert metrics['policy_target_entropy'] == 0.
+    assert metrics['policy_target_effective_actions'] == 1.
+    assert metrics['played_not_prior_argmax'] == 0
+    assert metrics['played_not_prior_argmax_fraction'] == 0.
+    assert metrics['mean_game_length'] == 1.
+    assert metrics['bombs_per_game'] == 1.
     np.testing.assert_array_equal(data['value'], [1., 1.])
 
 
@@ -90,3 +96,51 @@ def test_value_validation_defaults_and_disable_switch():
     assert args.value_validation_games == 16
     disabled = train.parser().parse_args(['selfplay', '--value-validation-every', '0'])
     assert disabled.value_validation_every == 0
+
+
+def test_clean_prior_argmax_survives_root_noise():
+    from msflags.game import Config, Game
+    from msflags.mcts import Node, Search
+
+    cfg = Config(2, 2, 1)
+    game = Game.random(cfg, np.random.default_rng(123))
+    root = Node(game.to_move)
+    policy = np.zeros(2 * cfg.n)
+    policy[0], policy[1] = .6, .4
+    root.expand(game.public().legal_mask(), policy, 0.)
+
+    class Noise:
+        def dirichlet(self, alpha):
+            noise = np.zeros(len(alpha))
+            noise[-1] = 1.
+            return noise
+
+    search = Search(game.public(), 2, root=root, rng=Noise(),
+                    dirichlet_alpha=.03, dirichlet_frac=1.)
+    assert root.prior_argmax == 0
+    assert root.actions[root.prior.argmax()] != root.prior_argmax
+    # Reusing an expanded root must not overwrite the clean network choice.
+    Search(game.public(), 2, root=search.root, rng=Noise(),
+           dirichlet_alpha=.03, dirichlet_frac=1.)
+    assert root.prior_argmax == 0
+
+
+def test_exploration_metrics_measure_target_entropy_and_sampled_actions(tmp_path, monkeypatch):
+    args = tiny_args(tmp_path)
+    args.sims, args.games = 1, 32
+    args.temperature, args.temperature_moves = 1., 60
+    records = []
+    monkeypatch.setattr(train, 'log', lambda args, event, **fields: records.append(fields))
+
+    class SplitBombEvaluator(BombEvaluator):
+        def __call__(self, states, cfg):
+            policy, values, mines = super().__call__(states, cfg)
+            policy[:, cfg.n:cfg.n + 2] = .5
+            return policy, values, mines
+
+    train.selfplay_batch(args, SplitBombEvaluator(), 123)
+    metrics = records[-1]
+    np.testing.assert_allclose(metrics['policy_target_entropy'], np.log(2))
+    np.testing.assert_allclose(metrics['policy_target_effective_actions'], 2.)
+    assert 0 < metrics['played_not_prior_argmax'] < args.games
+    assert metrics['played_not_prior_argmax_fraction'] == metrics['played_not_prior_argmax'] / args.games

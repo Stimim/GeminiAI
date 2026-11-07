@@ -13,7 +13,8 @@
       {"checkpoint": "checkpoints/run-medium/selfplay-1794003121009409453.pt", "training": {"bootstrap": 8000, "selfplay": 70}},
       {"checkpoint": "checkpoints/run-medium/selfplay-1794006042719861991.pt", "training": {"bootstrap": 8000, "selfplay": 80}},
       {"checkpoint": "checkpoints/run-medium/selfplay-1794025737856403222.pt", "training": {"bootstrap": 8000, "selfplay": 113}},
-      {"checkpoint": "checkpoints/run-medium/selfplay-1794052979925439532.pt", "training": {"bootstrap": 8000, "selfplay": 161}}
+      {"checkpoint": "checkpoints/run-medium/selfplay-1794052979925439532.pt", "training": {"bootstrap": 8000, "selfplay": 161}},
+      {"checkpoint": "checkpoints/run-medium/selfplay-1794066758193997836.pt", "training": {"bootstrap": 8000, "selfplay": 181}}
     ]
   },
   "r32x3": {

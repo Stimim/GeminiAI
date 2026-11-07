@@ -1,0 +1,74 @@
+{
+  "checkpoint_a": "checkpoints/run-medium-explore/selfplay-1794066157612533050.pt",
+  "checkpoint_b": "checkpoints/run-medium/selfplay-1794066758193997836.pt",
+  "games": 200,
+  "layouts": 100,
+  "wins": 90,
+  "win_rate": 0.45,
+  "paired_bootstrap_95": [
+    0.38,
+    0.52
+  ],
+  "pair_sweeps": 21,
+  "pair_splits": 48,
+  "pair_losses": 31,
+  "seed": 7320000,
+  "mode": "mcts",
+  "mode_b": "mcts",
+  "sims": 100,
+  "sims_b": 100,
+  "c_puct": 1.5,
+  "gumbel_noise": false,
+  "fpu_reduction": 0.2,
+  "leaf_batch_size": [
+    4,
+    4
+  ],
+  "tree_reuse": [
+    false,
+    false
+  ],
+  "moves": [
+    9559,
+    9703
+  ],
+  "side_seconds": [
+    405.6749560656026,
+    406.5509902490303
+  ],
+  "mean_seconds_per_move": [
+    0.04243905806732949,
+    0.04189951460878391
+  ],
+  "seconds": 812.6480839260621,
+  "name": "treatment-control-mcts",
+  "argv": [
+    "uv",
+    "run",
+    "python",
+    "-m",
+    "msflags.compare",
+    "--checkpoint-a",
+    "checkpoints/run-medium-explore/selfplay-1794066157612533050.pt",
+    "--checkpoint-b",
+    "checkpoints/run-medium/selfplay-1794066758193997836.pt",
+    "--mode",
+    "mcts",
+    "--sims",
+    "100",
+    "--leaf-batch-size",
+    "4",
+    "--no-tree-reuse",
+    "--no-tree-reuse-b",
+    "--games",
+    "200",
+    "--seed",
+    "7320000",
+    "--device",
+    "cuda",
+    "--threads",
+    "1"
+  ],
+  "started_at": 1794066776.4257305,
+  "finished_at": 1794067590.6375394
+}
