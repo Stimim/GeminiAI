@@ -75,3 +75,33 @@ def test_shared_evaluator_failure_releases_every_worker(tmp_path):
             selfplay_games(args, fail, 123)
     requests.close()
     requests.join_thread()
+
+
+def test_shared_inference_chunks_preserve_each_worker_leaf_order():
+    import queue
+    from msflags.game import Config
+    from msflags.train import _serve_worker_requests
+    requests = queue.Queue()
+    waiting, calls = [], []
+    offset = 0
+    for count in (33, 31, 7):
+        receive, send = multiprocessing.Pipe(duplex=False)
+        states = list(range(offset, offset + count))
+        requests.put((states, Config(3, 3, 3), send))
+        waiting.append((receive, states))
+        offset += count
+
+    def evaluate(states, cfg):
+        calls.append(len(states))
+        ids = np.asarray(states)
+        return ids[:, None], ids, ids[:, None]
+
+    _serve_worker_requests(evaluate, requests)
+    assert calls == [64, 7]
+    for receive, expected in waiting:
+        ok, (policy, values, mine) = receive.recv()
+        receive.close()
+        assert ok
+        np.testing.assert_array_equal(policy[:, 0], expected)
+        np.testing.assert_array_equal(values, expected)
+        np.testing.assert_array_equal(mine[:, 0], expected)

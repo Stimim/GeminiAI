@@ -703,7 +703,7 @@ def parser():
         s.add_argument('--gumbel-k', type=int, default=16)
         s.add_argument('--gumbel-noise', action=argparse.BooleanOptionalAction,
                        default=name == 'selfplay', help='Gumbel exploration (off by default for arena).')
-        s.add_argument('--leaf-batch-size', type=int, default=1)
+        s.add_argument('--leaf-batch-size', type=int, default=4 if name != 'bootstrap' else 1)
         s.add_argument('--concurrent-games', type=int, default=32)
         if name != 'arena':
             s.add_argument('--iterations', type=int, default=1 if name == 'bootstrap' else 10)

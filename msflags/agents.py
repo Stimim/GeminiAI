@@ -98,7 +98,7 @@ class MCTSAgent(Agent):
     name = "mcts"
 
     def __init__(self, evaluator: Evaluator, sims: int = 200, rng: np.random.Generator | None = None,
-                 leaf_batch_size: int = 1, tree_reuse: bool = True, **search_kw):
+                 leaf_batch_size: int = 4, tree_reuse: bool = True, **search_kw):
         self.ev = evaluator
         self.sims = sims
         self.rng = rng or np.random.default_rng()
