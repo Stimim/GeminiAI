@@ -200,9 +200,14 @@ class ArenaManager:
                 for (item, _), policy in zip(group, policies):
                     actions[item["index"]] = int(np.argmax(policy))
             else:
-                searches = [Search(item["game"].public(), agent.sims, rng=agent.rng, **agent.search_kw) for item, agent in group]
-                run_searches(searches, evaluator, group[0][0]["game"].cfg)
-                for (item, _), search in zip(group, searches):
+                searches = []
+                for item, agent in group:
+                    pub = item["game"].public()
+                    root = agent.last.matching_root(pub) if agent.tree_reuse and agent.last is not None else None
+                    searches.append(Search(pub, agent.sims, rng=agent.rng, root=root, **agent.search_kw))
+                run_searches(searches, evaluator, group[0][0]["game"].cfg, group[0][1].leaf_batch_size)
+                for (item, agent), search in zip(group, searches):
+                    agent.last = search
                     actions[item["index"]] = search.best_action()
         return actions
 

@@ -49,3 +49,17 @@ def test_budget_failure_never_deletes_protected_files(tmp_path, monkeypatch):
 def test_prune_cli_parser_is_independent_of_board_arguments():
     args = train.parser().parse_args(['prune', '--dry-run'])
     assert args.dry_run and args.root == 'checkpoints'
+
+
+def test_training_retention_never_deletes_other_run(tmp_path, monkeypatch):
+    first, second = tmp_path / 'A', tmp_path / 'B'
+    first.mkdir()
+    second.mkdir()
+    checkpoint_set(first)
+    checkpoint_set(second)
+    original = {p.name: p.read_bytes() for p in second.iterdir()}
+    monkeypatch.setattr(registry, 'pinned_checkpoints', lambda: set())
+    result = train.prune_checkpoints(tmp_path, output=first)
+    assert result['deleted']
+    assert all(str(first) in path for path in result['deleted'])
+    assert {p.name: p.read_bytes() for p in second.iterdir()} == original

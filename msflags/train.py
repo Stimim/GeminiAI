@@ -11,6 +11,7 @@ import os
 from pathlib import Path
 import multiprocessing
 import signal
+import queue
 import warnings
 import time
 
@@ -192,22 +193,24 @@ def bootstrap(args):
                    bootstrap_steps=args.steps * epoch, selfplay_iterations=0)
 
 
-def run_searches(searches, evaluator, cfg):
-    """One leaf per live search per GPU batch, until every budget is exhausted."""
+def run_searches(searches, evaluator, cfg, leaf_batch_size=1):
+    """Batch multiple virtual-loss-diversified leaves from every live search."""
     active = list(searches)
     while active:
         pending, leaves = [], []
         for s in active:
-            leaf = s.next_leaf()
-            if leaf is not None:
-                pending.append(s)
-                leaves.append(leaf)
+            batch = s.next_leaves(leaf_batch_size)
+            if batch:
+                pending.append((s, len(batch)))
+                leaves.extend(batch)
         if not pending:
             break
         policies, values, _ = evaluator(leaves, cfg)
-        for s, pi, v in zip(pending, policies, values):
-            s.provide(pi, float(v))
-        active = pending
+        offset = 0
+        for s, count in pending:
+            s.provide_batch(policies[offset:offset + count], values[offset:offset + count])
+            offset += count
+        active = [s for s, _ in pending]
 
 
 def selfplay_batch(args, evaluator, seed):
@@ -224,12 +227,15 @@ def selfplay_batch(args, evaluator, seed):
         searches = [Search(games[i].public(), args.sims, rng=rng, root=roots[i],
                            c_puct=args.c_puct, fpu_reduction=args.fpu_reduction,
                            dirichlet_alpha=args.dirichlet_alpha,
-                           dirichlet_frac=args.dirichlet_frac) for i in active]
-        run_searches(searches, evaluator, cfg)
+                           dirichlet_frac=args.dirichlet_frac,
+                           search=getattr(args, 'search', 'puct'),
+                           gumbel_k=getattr(args, 'gumbel_k', 16),
+                           gumbel_noise=getattr(args, 'gumbel_noise', True)) for i in active]
+        run_searches(searches, evaluator, cfg, getattr(args, 'leaf_batch_size', 1))
         next_active = []
         for i, s in zip(active, searches):
             g = games[i]
-            pi = s.visit_policy().astype(np.float32)
+            pi = s.improved_policy().astype(np.float32)
             histories[i].append(Position(g.board.copy(), list(g.scores), g.to_move, pi,
                                          s.analysis.probs.astype(np.float32), bombs=list(g.bombs)))
             if moves[i] < args.temperature_moves and args.temperature > 0:
@@ -262,20 +268,78 @@ def selfplay_batch(args, evaluator, seed):
 _worker_evaluator = None
 
 
-def _init_selfplay_worker(net_cfg, device, threads):
+class _WorkerEvaluator:
+    """CPU search workers share the trainer's single GPU model through a queue."""
+
+    def __init__(self, requests):
+        self.requests = requests
+
+    def __call__(self, states, cfg):
+        receive, send = multiprocessing.Pipe(duplex=False)
+        try:
+            self.requests.put((states, cfg, send))
+            ok, result = receive.recv()
+            if not ok:
+                raise RuntimeError(result)
+            return result
+        finally:
+            receive.close()
+            send.close()
+
+
+def _init_selfplay_worker(requests, threads):
     signal.signal(signal.SIGTERM, signal.SIG_IGN)
     signal.signal(signal.SIGINT, signal.SIG_IGN)
+    # A terminated trainer must not strand large, signal-ignoring worker processes.
+    if os.name == 'posix' and Path('/proc/self').exists():
+        import ctypes
+        parent_process = multiprocessing.parent_process()
+        parent = parent_process.pid if parent_process is not None else os.getppid()
+        if os.getppid() != parent:
+            os._exit(1)
+        if ctypes.CDLL(None, use_errno=True).prctl(1, signal.SIGKILL, 0, 0, 0) != 0:
+            raise OSError(ctypes.get_errno(), 'Cannot set worker parent-death signal')
+        if os.getppid() != parent:
+            os._exit(1)
     global _worker_evaluator
     torch.set_num_threads(threads)
-    if torch.device(device).type == 'cuda':
-        torch.backends.cudnn.benchmark = True
-    _worker_evaluator = Evaluator(Net(net_cfg), device)
+    _worker_evaluator = _WorkerEvaluator(requests)
 
 
 def _selfplay_worker(job):
-    args, state, seed = job
-    _worker_evaluator.net.load_state_dict(state)
+    args, seed = job
     return selfplay_batch(args, _worker_evaluator, seed)
+
+
+def _serve_worker_requests(evaluator, requests):
+    states, cfg, connection = requests.get(timeout=.05)
+    pending = [(states, cfg, connection)]
+    # Drain already waiting workers without delaying the first requester.
+    while True:
+        try:
+            pending.append(requests.get_nowait())
+        except queue.Empty:
+            break
+    leaves = [state for states, _, _ in pending for state in states]
+    try:
+        # Bound inference activation memory independently of worker count and K.
+        evaluated = [evaluator(leaves[i:i + 64], cfg) for i in range(0, len(leaves), 64)]
+        outputs = [np.concatenate([part[k] for part in evaluated]) for k in range(3)]
+        offset = 0
+        for states, _, connection in pending:
+            count = len(states)
+            connection.send((True, tuple(output[offset:offset + count] for output in outputs)))
+            offset += count
+    except BaseException as error:
+        for _, _, connection in pending:
+            try:
+                connection.send((False, str(error)))
+            except (BrokenPipeError, EOFError, OSError):
+                pass
+        raise
+    finally:
+        for _, _, connection in pending:
+            connection.close()
 
 
 def selfplay_games(args, evaluator, seed):
@@ -288,8 +352,34 @@ def selfplay_games(args, evaluator, seed):
     if pool is None:
         batches = [selfplay_batch(batch_args, evaluator, batch_seed) for batch_args, batch_seed in jobs]
     else:
-        state = {key: value.detach().cpu() for key, value in evaluator.net.state_dict().items()}
-        batches = list(pool.map(_selfplay_worker, [(batch_args, state, batch_seed) for batch_args, batch_seed in jobs]))
+        requests = evaluator.selfplay_requests
+        futures = [pool.submit(_selfplay_worker, job) for job in jobs]
+        try:
+            while not all(future.done() for future in futures):
+                for future in futures:
+                    if future.done() and not future.cancelled() and future.exception() is not None:
+                        raise future.exception()
+                try:
+                    _serve_worker_requests(evaluator, requests)
+                except queue.Empty:
+                    pass
+            batches = [future.result() for future in futures]
+        except BaseException as error:
+            # Release every waiting worker before the executor's shutdown joins it.
+            for future in futures:
+                future.cancel()
+            while not all(future.done() for future in futures):
+                try:
+                    _, _, connection = requests.get(timeout=.05)
+                except queue.Empty:
+                    continue
+                try:
+                    connection.send((False, str(error)))
+                except (BrokenPipeError, EOFError, OSError):
+                    pass
+                finally:
+                    connection.close()
+            raise
     return {k: np.concatenate([batch[k] for batch in batches]) for k in batches[0]}
 
 
@@ -355,9 +445,10 @@ def disk_bytes(root):
     return total
 
 
-def prune_checkpoints(root='checkpoints', dry_run=False, limit=DISK_LIMIT_BYTES):
-    """Only obsolete immutable self-play weights are eligible for deletion."""
+def prune_checkpoints(root='checkpoints', dry_run=False, limit=DISK_LIMIT_BYTES, *, output=None):
+    """Measure root globally, but training may delete only inside its own output."""
     root = Path(root)
+    deletion_root = Path(output).resolve() if output is not None else root.resolve()
     before = disk_bytes(root)
     project_root = Path.cwd() if root.resolve().is_relative_to(Path.cwd()) else root
     project_usage = disk_bytes(project_root)
@@ -369,13 +460,15 @@ def prune_checkpoints(root='checkpoints', dry_run=False, limit=DISK_LIMIT_BYTES)
                     deleted=[], over_budget=max(before, project_usage) > limit)
     pinned = {Path(path).resolve() for path in pinned_checkpoints()}
     deleted = []
-    for directory, _, files in os.walk(root):
+    for directory, _, files in os.walk(deletion_root):
         directory = Path(directory)
         candidates = []
         for name in files:
             if not (name.startswith('selfplay-') and name.endswith('.pt')):
                 continue
             path = directory / name
+            if not path.resolve().is_relative_to(deletion_root):
+                continue
             try:
                 metadata = torch.load(path, map_location='cpu', weights_only=False)
                 iteration = metadata.get('selfplay_iterations', metadata.get('iteration'))
@@ -425,7 +518,7 @@ def selfplay(args):
         raise FileNotFoundError(f'checkpoint replay buffer missing: {replay_path}')
     log(args, 'resume', checkpoint=str(source), completed_iterations=previous_iterations,
         replay_positions=0 if replay is None else len(replay['board']))
-    initial_retention = prune_checkpoints(args.disk_root)
+    initial_retention = prune_checkpoints(args.disk_root, output=args.output)
     log(args, 'retention', **initial_retention)
     if initial_retention['over_budget']:
         return
@@ -437,12 +530,16 @@ def selfplay(args):
 
     previous_handlers = {sig: signal.signal(sig, request_stop) for sig in (signal.SIGTERM, signal.SIGINT)}
     pool = None
+    requests = None
     if args.workers > 1:
-        pool = ProcessPoolExecutor(max_workers=args.workers, mp_context=multiprocessing.get_context('spawn'),
+        context = multiprocessing.get_context('spawn')
+        requests = context.Queue()
+        pool = ProcessPoolExecutor(max_workers=args.workers, mp_context=context,
                                    initializer=_init_selfplay_worker,
-                                   initargs=(net.cfg, args.device, args.worker_threads))
+                                   initargs=(requests, args.worker_threads))
     evaluator = Evaluator(net, args.device)
     evaluator.selfplay_pool = pool
+    evaluator.selfplay_requests = requests
     iterations = range(previous_iterations + 1, args.iterations + 1) if args.iterations else itertools.count(previous_iterations + 1)
     for iteration in iterations:
         args.iteration = iteration
@@ -488,12 +585,15 @@ def selfplay(args):
             checkpoint=str(saved),
             peak_vram_mb=(torch.cuda.max_memory_allocated(args.device) / 2**20
                           if torch.device(args.device).type == 'cuda' else 0))
-        retention = prune_checkpoints(args.disk_root)
+        retention = prune_checkpoints(args.disk_root, output=args.output)
         log(args, 'retention', **retention)
         if retention['over_budget'] or stop_requested:
             break
     if pool is not None:
         pool.shutdown()
+    if requests is not None:
+        requests.close()
+        requests.join_thread()
     for sig, handler in previous_handlers.items():
         signal.signal(sig, handler)
 
@@ -531,6 +631,7 @@ def arena_games(args, first, second, count, net=None):
     for offset in range(0, count, args.concurrent_games):
         ids = list(range(offset, min(count, offset+args.concurrent_games)))
         games = [Game.random(cfg, rng) for _ in ids]
+        previous = [[None] * len(games) for _ in range(2)]
         active = list(range(len(games)))
         while active:
             actions = {}
@@ -547,9 +648,19 @@ def arena_games(args, first, second, count, net=None):
                     settings = entries[side]['settings']
                     override = args.checkpoint if side == 0 else getattr(args, 'checkpoint_b', None)
                     if override:
-                        settings = dict(sims=args.sims, c_puct=args.c_puct, fpu_reduction=args.fpu_reduction)
-                    searches = [Search(games[i].public(), rng=rng, **settings) for i in selected]
-                    run_searches(searches, evaluators[side], cfg)
+                        settings = dict(sims=args.sims, c_puct=args.c_puct, fpu_reduction=args.fpu_reduction,
+                                        search=getattr(args, 'search', 'puct'),
+                                        gumbel_k=getattr(args, 'gumbel_k', 16),
+                                        gumbel_noise=getattr(args, 'gumbel_noise', False))
+                    searches = []
+                    for i in selected:
+                        pub = games[i].public()
+                        old = previous[side][i]
+                        root = old.matching_root(pub) if old is not None else None
+                        search = Search(pub, rng=rng, root=root, **settings)
+                        searches.append(search)
+                        previous[side][i] = search
+                    run_searches(searches, evaluators[side], cfg, getattr(args, 'leaf_batch_size', 1))
                     actions.update({i: s.best_action() for i, s in zip(selected, searches)})
             remaining = []
             for i in active:
@@ -588,6 +699,11 @@ def parser():
         s.add_argument('--sims', type=int, default=100)
         s.add_argument('--c-puct', type=float, default=1.5)
         s.add_argument('--fpu-reduction', type=float, default=0.2)
+        s.add_argument('--search', choices=('puct', 'gumbel'), default='puct')
+        s.add_argument('--gumbel-k', type=int, default=16)
+        s.add_argument('--gumbel-noise', action=argparse.BooleanOptionalAction,
+                       default=name == 'selfplay', help='Gumbel exploration (off by default for arena).')
+        s.add_argument('--leaf-batch-size', type=int, default=4 if name != 'bootstrap' else 1)
         s.add_argument('--concurrent-games', type=int, default=32)
         if name != 'arena':
             s.add_argument('--iterations', type=int, default=1 if name == 'bootstrap' else 10)
@@ -611,6 +727,8 @@ def parser():
         if name == 'selfplay':
             s.add_argument('--workers', type=int, default=1, help='Independent spawned self-play processes.')
             s.add_argument('--worker-threads', type=int, default=1)
+            s.add_argument('--cpu-share', type=int,
+                           help='Total CPU thread budget for trainer plus spawned workers.')
             s.add_argument('--disk-root', default='checkpoints')
             s.add_argument('--replay-size', type=int, default=100000)
             s.add_argument('--dirichlet-alpha', type=float, default=0.15)
@@ -644,6 +762,17 @@ def main():
         p.error('use a square board with a positive odd mine count smaller than its area (no draws)')
     if args.games < 1 or args.sims < 1 or args.concurrent_games < 1:
         p.error('games, sims, and concurrent-games must be positive')
+    if args.leaf_batch_size < 1 or args.gumbel_k < 1:
+        p.error('leaf-batch-size and gumbel-k must be positive')
+    if args.command == 'selfplay' and args.cpu_share is not None:
+        minimum = args.workers + 1 if args.workers > 1 else 1
+        if args.cpu_share < minimum:
+            p.error('cpu-share must cover one thread per worker plus the trainer')
+        if args.workers > 1:
+            args.threads = 1
+            args.worker_threads = (args.cpu_share - 1) // args.workers
+        else:
+            args.threads = args.cpu_share
     if args.command != 'arena' and (args.steps < 1 or args.batch_size < 1 or args.iterations < 0 or args.log_every < 1):
         p.error('steps, batch-size, and log-every must be positive; iterations must be nonnegative')
     if args.command == 'bootstrap' and args.iterations == 0:

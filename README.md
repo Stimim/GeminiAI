@@ -8,6 +8,84 @@ A two-player Minesweeper game and AI playground. Players alternate opening cells
 - **ResNet evaluator:** fully convolutional mine, open-policy, bomb-policy, and value heads, using 20 public-information input planes. Open policy is `beta * mine_logit + residual(features)`; the bomb head starts from clipped 5×5 expected mine counts. Open and bomb actions share a masked softmax over `2 × board cells`.
 - **Information-set MCTS:** searches from public information, sampling consistent determinizations with the constraint solver.
 
+### Search controls
+
+`MCTSAgent` reuses only descendants matching the observed public board, scores,
+player and bomb inventory; unseen opponent extra turns can traverse several
+levels. A missing outcome starts a fresh tree. No sampled mine layout is retained.
+Offline arena and paired comparisons use the same reuse rule.
+
+`Search(..., search="puct"|"gumbel", sims=100, gumbel_k=16)` supports ordinary
+PUCT and Gumbel-top-k root sampling with budgeted sequential halving. Each
+halving round gives surviving candidates equal visits before eliminating half.
+The candidate count is reduced when necessary to fit every halving round in the
+budget. As before, a fresh root evaluation counts as one simulation; a reused
+expanded root spends the whole budget on edges. Gumbel's final action maximizes
+the surviving candidates' Gumbel + log-prior + completed-Q score, without another
+random draw. `improved_policy()` returns the legal masked softmax of log-prior
+plus `(50 + max_visits) * 0.1 * normalized_completed_Q`; completed values are
+min-max normalized to [0,1] (a constant range maps to zero). Unvisited actions
+use the prior-weighted visited-value / network-value mixture from
+[Danihelka et al. (ICLR 2022)](https://iclr.cc/virtual/2022/poster/6418).
+`gumbel_c_visit=50` and `gumbel_c_scale=0.1` match the reference Mctx transform.
+Q is accumulated in each node's mover perspective, so the root's completed Q
+already has the root player's sign, including mine extra turns and bomb passes.
+Play/arena and compare disable Gumbel noise by default (`gumbel_noise=False`);
+self-play enables it. `--gumbel-noise` / `--no-gumbel-noise` explicitly select
+sampling or deterministic top-k. With noise off, one candidate and one simulation
+exactly reproduce the greedy policy action.
+Non-root selection remains PUCT: it already averages sampled chance outcomes
+and preserves the existing player-relative backup/extra-turn handling, isolating
+the root-allocation change rather than changing two selection algorithms at once.
+Open and bomb actions share the same masked action distribution.
+
+`next_leaves(K)` / `provide_batch(policies, values)` reserve independent pending
+leaves with virtual visits and loss. Reservations live in separate counters,
+so completion reverts virtual loss exactly without modifying real sums.
+Duplicate unexpanded public outcomes end a batch; root expansion and halving
+boundaries are evaluation barriers. `K=1` preserves sequential PUCT behavior.
+`MCTSAgent(..., leaf_batch_size=4, tree_reuse=True)` controls play batching.
+Play/server/offline-arena MCTS agents and training/arena CLI use K=4 by default;
+pass `leaf_batch_size=1` or `--leaf-batch-size 1` for the exact sequential path.
+Self-play and compare accept `--leaf-batch-size`, `--search` (compare: `--mode`)
+and `--gumbel-k`. Self-play stores the completed-Q target for Gumbel, visit targets
+for PUCT. Registry categories and published web identities are unchanged.
+
+For example, an unrecorded fresh-layout comparison against the pre-reuse baseline:
+
+```sh
+uv run python -m msflags.compare --checkpoint-a checkpoints/run-medium/selfplay-1794006042719861991.pt --checkpoint-b checkpoints/run-medium/selfplay-1794006042719861991.pt --mode gumbel --sims 32 --mode-b puct --sims-b 100 --no-tree-reuse-b --leaf-batch-size 1 --games 200 --seed 940000 --threads 1
+```
+
+Compare independently configured sides with `--mode-b`, `--sims-b`,
+`--leaf-batch-size-b` and `--no-tree-reuse-b` (a fresh-tree baseline).
+The result includes paired-layout bootstrap intervals and each side's total
+search/inference seconds divided by its move count. Concurrent-game timings
+are amortized throughput costs, not single-game interactive latency.
+
+Self-play accepts `--workers 4 --cpu-share 5` or explicit `--threads 1
+--worker-threads 1`. `--cpu-share` reserves one trainer thread and splits the
+remaining threads evenly among spawned workers; it rejects budgets too small
+to give every process one thread. Across N runs on a 20-thread machine, allocate
+at most `floor(20/N)` threads per run (including its trainer), subtracting other
+active workloads first. Four simultaneous runs can therefore use four workers
+plus a trainer each only if no additional CPU workload needs a share; six workers
+need at least seven threads per run. More workers than concurrent game batches
+cannot help. This is a thread budget, not CPU affinity or an OS scheduling quota.
+
+Spawned workers keep CPU search state only. Their leaf requests are coalesced in
+the trainer process, which owns the sole network/GPU context; inference is split
+into at most 64 leaves per call to bound activation memory. Weights therefore
+cannot go stale between training iterations, and adding workers no longer
+duplicates CUDA contexts or model state. Worker requests and inference failures
+are resolved before pool shutdown; Linux workers are killed if their parent dies.
+Before large benchmark pools, check `free -m`; retain at least 3 GiB available
+memory, and close each pool before starting the next configuration.
+
+Training retention measures the configured disk root globally but deletes only
+obsolete checkpoints within that run's own `--output` directory. Benchmark output
+belongs under `/tmp` or `checkpoints/dev-*/`; it must not prune live run directories.
+
 ## Setup
 
 ```sh
@@ -244,3 +322,218 @@ uv run pytest -q
 - Checkpoints are loaded with `torch.load(weights_only=False)`; never load untrusted files. Prefer `weights_only=True` or `safetensors` for deployment.
 - Put HTTPS behind a reverse proxy; static files can be served by a proxy/CDN. Add a health-check endpoint and structured logs.
 
+
+## Search performance experiments: medium g80
+
+**TL;DR:** PUCT-100 with tree reuse and K=4 is the conservative search default:
+about 2.4× cheaper than fresh-tree PUCT-100, with no detected strength loss.
+Six CPU-only workers with one shared GPU evaluator reached 63.53 positions/s;
+use fewer workers when other runs need the CPU/RAM budget.
+
+Checkpoint: `checkpoints/run-medium/selfplay-1794006042719861991.pt`.
+Hardware: RTX 4070 Laptop 8 GB, i7-13700H (20 threads), 15 GiB RAM.
+Experiments began alongside four controlled training runs and another benchmark
+worker; concurrent load changed during the experiments. No live run was paused
+or edited. Each benchmark parent and search worker used one Torch thread.
+
+### Design and measurement
+
+- Reuse matches public board, scores, turn and bomb inventory only. Missing
+  observed outcomes start fresh; opponent extra turns can traverse several levels.
+- Virtual loss has separate reservation counters, avoiding floating-point undo
+  of real values. K=1 is tested against sequential selection exactly.
+- Gumbel uses joint legal open/bomb top-k candidates and equal-visit sequential
+  halving. Candidate count is reduced as needed to fit the fixed budget; fresh
+  root expansion consumes one simulation, as in the original PUCT implementation.
+- Completed Q uses the root mover's perspective, a prior-weighted mixed value
+  for unvisited actions, min-max normalization to [0,1], and
+  `sigma=(50+max_visits)*0.1*normalized_Q`. Non-root selection remains PUCT.
+- Evaluation disables Gumbel noise; self-play can enable it. Both settings were
+  measured. A one-candidate, one-simulation, noise-off test reproduces greedy exactly.
+- CPU workers now share one parent GPU evaluator, capped at 64 leaves per call.
+  Failed requests are released before shutdown; Linux parent death kills workers.
+- Retention measures the configured disk root globally but deletes only within
+  the run's own output directory; a regression test protects a neighboring run.
+
+Throughput uses 22 independent early/mid/late public positions from greedy games
+(seeds 730100–730103), with three interleaved passes. Every position starts fresh.
+Parallel=1 approximates interactive search; parallel=16 amortizes inference.
+Strength uses 200 games per matchup: 100 independently generated layouts played
+in both seats, in five interleaved 40-game blocks. The 95% intervals bootstrap
+layout-pair scores (20,000 draws), not 200 independent outcomes.
+Seconds/move are each side's total search/inference time divided by moves,
+amortized over up to 16 concurrent games—not interactive latency.
+Ranges below are observed repeat/block min–max under shared load.
+All PUCT searches use c=1.5 and FPU reduction=0.2. Candidates reuse trees;
+the baseline is fresh-tree PUCT-100, K=1, without Dirichlet noise.
+
+### PUCT and initial Gumbel throughput
+
+Initial Gumbel used noise-on and an unnormalized unit-scale Q transform.
+Its rows are retained as diagnostic evidence, superseded by corrected results below.
+
+| Search | Parallel | Positions/s median [min–max] |
+|---|---:|---:|
+| Initial Gumbel-16 | 1 | 8.86 [7.84–10.46] |
+| Initial Gumbel-16 | 16 | 63.39 [30.03–69.31] |
+| Initial Gumbel-32 | 1 | 4.41 [4.37–5.31] |
+| Initial Gumbel-32 | 16 | 33.73 [30.48–34.53] |
+| PUCT-100 K=1 | 1 | 1.44 [1.41–1.55] |
+| PUCT-100 K=1 | 16 | 8.74 [8.49–10.41] |
+| PUCT-100 K=4 | 1 | 4.52 [4.48–4.70] |
+| PUCT-100 K=4 | 16 | 10.72 [7.08–12.41] |
+| PUCT-100 K=8 | 1 | 7.48 [6.22–7.56] |
+| PUCT-100 K=8 | 16 | 7.94 [4.22–11.99] |
+
+### PUCT and initial Gumbel paired results
+
+Block seeds: `940000 + repeat*10000 + candidate_index*1000 + opponent_offset`.
+Indices 0–4 are Gumbel-16, Gumbel-32, PUCT-100 K=1, K=4, K=8;
+opponent offset is 500 for baseline, otherwise zero.
+
+| Candidate | Opponent | Wins/games | Win rate [95% CI] | Candidate s/move [min–max] | Opponent s/move [min–max] |
+|---|---|---:|---:|---:|---:|
+| Initial Gumbel-16 | baseline | 36/200 | 18.0% [13.0–23.0%] | .0282 [.0166–.0553] | .1547 [.0900–.3003] |
+| Initial Gumbel-16 | greedy | 41/200 | 20.5% [15.0–26.5%] | .0291 [.0146–.0520] | .0012 [.0006–.0022] |
+| Initial Gumbel-32 | baseline | 40/200 | 20.0% [14.5–25.5%] | .0565 [.0289–.1092] | .1574 [.0825–.3026] |
+| Initial Gumbel-32 | greedy | 44/200 | 22.0% [16.5–28.0%] | .0583 [.0324–.1097] | .0012 [.0007–.0023] |
+| PUCT-100 K=1 | baseline | 100/200 | 50.0% [43.5–56.5%] | .1689 [.0916–.3075] | .1675 [.0876–.3056] |
+| PUCT-100 K=1 | greedy | 104/200 | 52.0% [44.5–59.0%] | .1743 [.0971–.3455] | .0013 [.0007–.0027] |
+| PUCT-100 K=4 | baseline | 99/200 | 49.5% [43.5–55.5%] | .0690 [.0415–.1198] | .1655 [.0952–.2864] |
+| PUCT-100 K=4 | greedy | 114/200 | 57.0% [50.0–63.5%] | .0695 [.0388–.1295] | .0013 [.0007–.0028] |
+| PUCT-100 K=8 | baseline | 96/200 | 48.0% [41.5–54.5%] | .0499 [.0308–.0785] | .1589 [.0870–.2587] |
+| PUCT-100 K=8 | greedy | 106/200 | 53.0% [45.5–60.0%] | .0513 [.0329–.0901] | .0012 [.0008–.0023] |
+
+### Corrected Gumbel throughput
+
+`off` means deterministic top-k (g=0); `on` means standard Gumbel noise.
+Both use normalized completed Q, c_visit=50 and c_scale=0.1, with K=1.
+
+| Search | Parallel | Positions/s median [min–max] |
+|---|---:|---:|
+| Gumbel-16 off | 1 | 15.12 [15.04–15.41] |
+| Gumbel-16 off | 16 | 107.48 [50.48–110.23] |
+| Gumbel-16 on | 1 | 14.96 [13.94–15.70] |
+| Gumbel-16 on | 16 | 120.50 [64.60–121.99] |
+| Gumbel-32 off | 1 | 7.61 [7.30–7.70] |
+| Gumbel-32 off | 16 | 56.20 [44.64–58.12] |
+| Gumbel-32 on | 1 | 7.56 [7.34–7.58] |
+| Gumbel-32 on | 16 | 54.28 [54.14–55.06] |
+
+### Corrected Gumbel paired confirmation
+
+Fresh block seeds: `1200000 + repeat*10000 + candidate_index*1000 + opponent_offset`.
+Indices 0–3 are G16-off, G32-off, G16-on, G32-on; opponent offset is as above.
+
+| Candidate | Opponent | Wins/games | Win rate [95% CI] | Candidate s/move [min–max] | Opponent s/move [min–max] |
+|---|---|---:|---:|---:|---:|
+| Gumbel-16 off | baseline | 90/200 | 45.0% [38.5–51.5%] | .0168 [.0140–.0188] | .1044 [.0896–.1164] |
+| Gumbel-16 off | greedy | 101/200 | 50.5% [44.0–57.0%] | .0168 [.0136–.0198] | .0009 [.0007–.0012] |
+| Gumbel-16 on | greedy | 64/200 | 32.0% [25.5–39.0%] | .0160 [.0133–.0187] | .0007 [.0006–.0008] |
+| Gumbel-32 off | baseline | 96/200 | 48.0% [41.0–55.0%] | .0305 [.0263–.0341] | .0966 [.0849–.1086] |
+| Gumbel-32 off | greedy | 101/200 | 50.5% [43.5–57.5%] | .0326 [.0260–.0375] | .0008 [.0007–.0009] |
+| Gumbel-32 on | greedy | 75/200 | 37.5% [31.0–44.0%] | .0308 [.0268–.0375] | .0007 [.0006–.0009] |
+
+The initial 18–22% collapse was not grounds for rejecting Gumbel itself.
+The audit found inappropriate evaluation noise and a mismatched Q transform,
+not a root-value sign error. Tests explicitly cover both players, mine extra
+turns, safe/bomb passes, mixed-value arithmetic, normalization and illegal masks.
+After correction, noise-off G16/G32 each score 50.5% against greedy.
+Noise-on still loses significantly here: noisy top-k samples from the policy,
+rather than restricting candidates to its deterministic highest-prior actions.
+These data support disabling exploration noise for evaluation; they do not show
+a statistically established strength improvement from Gumbel planning.
+
+### Memory-safe persistent self-play worker scaling
+
+48 complete games per timing, eight concurrent games per task (six tasks),
+three interleaved repeats. Each CPU worker and parent has one Torch thread.
+Pools warm before timing and close between configurations. Inference is capped
+at 64 leaves; minimum available RAM is sampled before each inference.
+Generation seeds are `2200000 + repeat*10000`; worker counts use identical seeds.
+Dirichlet alpha=.15/fraction=.25, temperature 1 for 30 moves; no optimizer updates.
+
+| Search | Workers (+1 trainer) | Positions/s median [min–max] | Speedup vs 2 workers | Minimum available RAM (MiB) |
+|---|---:|---:|---:|---:|
+| PUCT-100 K=1 | 2 | 13.24 [12.41–13.56] | 1.00× | 7134 |
+| PUCT-100 K=1 | 4 | 20.44 [18.47–21.06] | 1.54× | 6554 |
+| PUCT-100 K=1 | 6 | 31.43 [30.78–34.06] | 2.37× | 5889 |
+| PUCT-100 K=4 | 2 | 34.68 [34.51–36.28] | 1.00× | 7610 |
+| PUCT-100 K=4 | 4 | 48.21 [45.50–48.50] | 1.39× | 6948 |
+| PUCT-100 K=4 | 6 | 63.53 [60.00–65.97] | 1.83× | 6266 |
+
+### Superseded worker architecture: diagnostic timings
+
+Earlier workers each owned a GPU model/context. This is not recommended on the
+shared 15 GiB machine. Its Gumbel search also predates the transform correction.
+The final six-worker repeat was interrupted; completed repeat counts are explicit.
+
+| Search | Workers | Repeats | Positions/s median [min–max] |
+|---|---:|---:|---:|
+| Initial Gumbel-32 | 2 | 3 | 70.29 [51.47–71.43] |
+| Initial Gumbel-32 | 4 | 3 | 72.52 [66.79–84.86] |
+| Initial Gumbel-32 | 6 | 2 | 91.45 [90.43–92.46] |
+| PUCT-100 K=1 | 2 | 3 | 18.58 [17.35–21.90] |
+| PUCT-100 K=1 | 4 | 3 | 24.31 [23.88–26.31] |
+| PUCT-100 K=1 | 6 | 2 | 28.61 [28.59–28.63] |
+
+### Recommendations and safety
+
+1. **Search-enabled play/arena:** PUCT-100, tree reuse, K=4. It scored 49.5%
+   against the baseline at .0690 vs .1655 seconds/move: about 2.4× cheaper,
+   without detected strength loss (not a formal non-inferiority guarantee).
+   Interactive-position throughput improved 3.1×. K=8 is a lower-latency option,
+   but K=4 had better parallel throughput and the strongest point estimate vs greedy.
+   The greedy policy remains the cheapest option; a clear search strength gain
+   over greedy has not been established by these intervals.
+2. **Gumbel:** noise-off G16 is a useful fast option (.0168 vs baseline .1044
+   seconds/move), but its 45% baseline win rate leaves meaningful strength
+   uncertainty. It is selectable, not the default. No new registry category is
+   recommended from this evidence alone; any later identity must distinguish
+   its fixed budget, candidate cap, normalized transform and noise-off evaluation.
+3. **Self-play:** retain PUCT visit targets, use K=4. These matches do not establish
+   which target learns better; completed-Q targets are available but unpromoted.
+   Six CPU-only workers were fastest here: `--workers 6 --cpu-share 7
+   --leaf-batch-size 4 --concurrent-games 8 --games 48` reached 63.53 positions/s,
+   vs 13.24 for two workers/K=1 (4.8×), with at least 6266 MiB sampled available RAM.
+   Keep at least as many game batches as workers; six idle workers cannot speed
+   up a single batch. Leave the running controlled trials unchanged.
+4. **Across runs:** budget at most `floor(20/N)` CPU threads per run, including
+   the trainer, after subtracting other workloads. Four workers plus one trainer
+   per run consumes all 20 threads across four runs; six workers each would not
+   fit that fair split. CPU feasibility is not a RAM guarantee: on 15 GiB, start
+   conservatively and raise worker counts only while retaining at least 3 GiB
+   available memory. The measured six-worker result is for one benchmark run
+   alongside existing workloads, not four simultaneous six-worker runs.
+
+The original benchmark had `timeout=0` (reported as no deadline), but exited
+143/SIGTERM after 15489.48 seconds. This is not exit 137/SIGKILL. The sender could
+not be identified: completed tool metadata had expired, and this agent had not
+sent a termination signal before that exit. Six orphaned development-only workers
+showed about 1.68 GiB RSS each; those workers and their development resource tracker
+were stopped. Available RAM rose from 2969 to 10586 MiB. No main-checkout training
+process was touched. This does not establish the cause of the separately reported
+training-process death. The new worker architecture prevents Linux orphan survival
+and avoids per-worker GPU contexts. Final scaling runs checked `free -m` before
+pools, sampled at least 5889 MiB available across all configurations, and released
+their pools between runs. After completion, `free -m` showed 9708 MiB available.
+
+Raw block/repeat data and machine-readable summaries are preserved in the allowed
+shared-checkpoint artifact directory:
+`checkpoints/dev-search-perf-1794035211243760185/`.
+
+### Delivery
+
+Changed: `msflags/mcts.py`, `msflags/agents.py`, `msflags/arena.py`,
+`msflags/compare.py`, `msflags/train.py`, `tests/test_search_modes.py`,
+`tests/test_selfplay_workers.py`, `tests/test_retention.py`, and this README.
+Registry categories, generation pins and web pages are unchanged.
+
+Final verification: `uv run pytest -q` — **193 passed in 28.65 seconds**.
+Coverage includes exact reservation reversal, K=1/sequential equality, public-only
+reuse and hidden-layout invariance, Gumbel budget accounting and greedy sanity,
+root value perspectives, normalized completed-Q arithmetic/masks, worker CPU
+budgets, shared inference chunk ordering/error cleanup, and output-scoped retention.
+
+Implementation commits on `search-perf`: `dd82f00`, `46f5cc3`, `5490743`.
+The final report and measured K=4 defaults are committed together after verification.
