@@ -217,6 +217,7 @@ def selfplay_batch(args, evaluator, seed):
     histories = [[] for _ in games]
     roots = [None] * len(games)
     moves = [0] * len(games)
+    action_counts = [dict(bomb=0, safe=0, mine=0) for _ in games]
     active = list(range(len(games)))
     start = time.monotonic()
     while active:
@@ -236,6 +237,8 @@ def selfplay_batch(args, evaluator, seed):
                 action = int(rng.choice(len(pi), p=weights / weights.sum()))
             else:
                 action = s.best_action()
+            kind = 'bomb' if action >= cfg.n else 'mine' if g.mines[action] else 'safe'
+            action_counts[i][kind] += 1
             g.step(action)
             roots[i] = s.child_root(action, g.board)
             moves[i] += 1
@@ -247,7 +250,12 @@ def selfplay_batch(args, evaluator, seed):
         for p in history:
             p.value = 1. if p.player == g.winner else -1.
         positions.extend(history)
-    log(args, 'selfplay_games', games=len(games), positions=len(positions), games_per_second=len(games)/(time.monotonic()-start))
+    log(args, 'selfplay_games', games=len(games), positions=len(positions),
+        games_per_second=len(games)/(time.monotonic()-start),
+        split=getattr(args, 'generation_split', 'replay'),
+        game_statistics=[dict(moves=sum(counts.values()), **counts) for counts in action_counts],
+        action_counts={kind: sum(counts[kind] for counts in action_counts)
+                       for kind in ('bomb', 'safe', 'mine')})
     return pack(positions, cfg)
 
 
@@ -283,6 +291,47 @@ def selfplay_games(args, evaluator, seed):
         state = {key: value.detach().cpu() for key, value in evaluator.net.state_dict().items()}
         batches = list(pool.map(_selfplay_worker, [(batch_args, state, batch_seed) for batch_args, batch_seed in jobs]))
     return {k: np.concatenate([batch[k] for batch in batches]) for k in batches[0]}
+
+
+def validate_value(args, evaluator, seed):
+    """Fresh complete self-play games, scored but never inserted into replay."""
+    validation_args = argparse.Namespace(**vars(args))
+    validation_args.games = args.value_validation_games
+    validation_args.generation_split = 'validation'
+    started = time.monotonic()
+    data = selfplay_games(validation_args, evaluator, seed)
+    generation_seconds = time.monotonic() - started
+    predictions = []
+    cfg = Config(args.size, args.size, args.mines)
+    for offset in range(0, len(data['board']), 128):
+        part = slice(offset, offset + 128)
+        states = list(zip(data['board'][part], data['scores'][part],
+                          data['player'][part], data['bombs'][part]))
+        _, values, _ = evaluator(states, cfg)
+        predictions.append(values)
+    values = np.concatenate(predictions)
+    target = data['value']
+    rows = np.arange(len(target))
+    margin = (data['scores'][rows, data['player']] -
+              data['scores'][rows, 1 - data['player']])
+    scores = data['scores'].sum(1)
+    bands = []
+    for low, high in ((0, 10), (10, 25), (25, 40), (40, 2 * cfg.win_score + 1)):
+        mask = (scores >= low) & (scores < high)
+        if mask.any():
+            bands.append(dict(score_min=low, score_max_exclusive=high,
+                              positions=int(mask.sum()),
+                              mse=float(np.mean((values[mask] - target[mask]) ** 2)),
+                              accuracy=float(np.mean((values[mask] > 0) == (target[mask] > 0)))))
+    log(args, 'value_validation', games=validation_args.games, positions=len(target),
+        seed=seed, policy='selfplay', replay_inserted=False,
+        mse=float(np.mean((values - target) ** 2)),
+        zero_mse=float(np.mean(target ** 2)),
+        score_leader_accuracy=float(np.mean((margin > 0) == (target > 0))),
+        accuracy=float(np.mean((values > 0) == (target > 0))),
+        prediction_mean=float(values.mean()), target_mean=float(target.mean()),
+        score_bands=bands, generation_seconds=generation_seconds,
+        seconds=time.monotonic() - started)
 
 
 DISK_LIMIT_BYTES = 100_000_000_000
@@ -407,7 +456,10 @@ def selfplay(args):
         replay = {k: data[k][-args.replay_size:].copy() if replay is None else
                   np.concatenate((replay[k], data[k]))[-args.replay_size:].copy() for k in data}
         del data
+        training_start = time.monotonic()
         fit(net, replay, args, args.steps, optimizer)
+        training_seconds = time.monotonic() - training_start
+        save_start = time.monotonic()
         # Alternate slots keep the last published checkpoint's replay intact
         # if interrupted while writing the next iteration.
         replay_file = f'replay-{iteration % 2}.npz'
@@ -417,12 +469,20 @@ def selfplay(args):
         os.replace(temporary, Path(args.output) / replay_file)
         saved = checkpoint(net, args, f'selfplay-{time.time_ns()}', stage='selfplay', iteration=iteration,
                            bootstrap_steps=bootstrap_steps, selfplay_iterations=iteration,
-                           replay_file=replay_file, optimizer=optimizer.state_dict())
+                           replay_file=replay_file, optimizer=optimizer.state_dict(),
+                           training_settings=vars(args).copy())
+        save_seconds = time.monotonic() - save_start
+        validation_seconds = 0.0
+        if args.value_validation_every and iteration % args.value_validation_every == 0:
+            validation_start = time.monotonic()
+            validate_value(args, evaluator, args.seed + 1_000_000_000 + iteration * args.games)
+            validation_seconds = time.monotonic() - validation_start
         if args.eval_every and iteration % args.eval_every == 0:
             result = arena_games(args, 'greedy', 'solver', args.eval_games, net=net)
             log(args, 'evaluation', iteration=iteration, **result)
         log(args, 'iteration', iteration=iteration, seconds=time.monotonic() - started,
-            generation_seconds=generation_seconds, games=args.games,
+            generation_seconds=generation_seconds, training_seconds=training_seconds,
+            save_seconds=save_seconds, validation_seconds=validation_seconds, games=args.games,
             games_per_second=args.games / generation_seconds, new_positions=new_positions,
             replay_positions=len(replay['board']), sample_reuse=args.steps * args.batch_size / new_positions,
             checkpoint=str(saved),
@@ -559,6 +619,9 @@ def parser():
             s.add_argument('--temperature-moves', type=int, default=30)
             s.add_argument('--eval-every', type=int, default=1)
             s.add_argument('--eval-games', type=int, default=40)
+            s.add_argument('--value-validation-every', type=int, default=5,
+                           help='Fresh held-out self-play validation cadence; zero disables.')
+            s.add_argument('--value-validation-games', type=int, default=16)
         if name == 'arena':
             from . import registry
             entries = registry.entries()
@@ -589,6 +652,8 @@ def main():
         p.error('replay-size and eval-games must be positive; eval-every must be nonnegative')
     if args.command == 'selfplay' and (args.workers < 1 or args.worker_threads < 1):
         p.error('workers and worker-threads must be positive')
+    if args.command == 'selfplay' and (args.value_validation_every < 0 or args.value_validation_games < 1):
+        p.error('value-validation-every must be nonnegative; value-validation-games must be positive')
     torch.set_num_threads(args.threads)
     torch.manual_seed(args.seed)
     if torch.cuda.is_available():

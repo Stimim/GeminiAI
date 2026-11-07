@@ -272,6 +272,13 @@ def test_selfplay_resumes_latest_with_matching_bounded_replay(tmp_path, monkeypa
     first_replay = (tmp_path / first['replay_file']).read_bytes()
     assert first['selfplay_iterations'] == 1
     assert 'optimizer' in first
+    assert first['training_settings']['value_weight'] == 0.25
+    assert first['training_settings']['lr'] == args.lr
+    import json
+    metrics = [json.loads(line) for line in (tmp_path / 'metrics.jsonl').read_text().splitlines()]
+    iteration_metrics = next(record for record in metrics if record['event'] == 'iteration')
+    for field in ('generation_seconds', 'training_seconds', 'save_seconds', 'validation_seconds'):
+        assert iteration_metrics[field] >= 0
     # Reusing the exact original launch command must prefer run/latest.pt.
     args.checkpoint = str(source)
     args.iterations = 2

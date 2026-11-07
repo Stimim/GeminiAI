@@ -87,7 +87,71 @@ Never overwrite, rename or repoint pinned weights: historical results are keyed 
 
 `checkpoints/run-medium/` (64×4) and `checkpoints/run-small/` (32×3) resume existing optimizer, replay, and iteration counters. The output directory's `latest.pt` always takes precedence over `--checkpoint`. `--iterations 0` is open-ended; positive values are total target iteration numbers, not additional iterations. Interrupted unpublished work is regenerated; the command's learning rate overrides the restored optimizer learning rate.
 
-### Round 2 launch and operation
+### Phase B: paired value/LR trials
+
+The controlled comparisons are medium `run-medium` versus `run-medium-vw1` and small `run-small` versus `run-small-lr2e4`. Each fork starts from **exactly the control's published weights, optimizer, replay and iteration**; its immutable starting copy is `trial-start.pt`. `checkpoints/phase-b-trials.json` records the starting/target iterations, SHA-256 checksums, launch arguments and process-group PIDs. `train.pid` in each directory is the current process group. No generations are promoted merely for starting a trial.
+
+| Directory under `checkpoints/` | Process group | Start → target | Learning rate | Value weight |
+|---|---:|---:|---:|---:|
+| `run-medium` (control) | 1757910 | 98 → 113 | 0.0002 | 0.25 |
+| `run-medium-vw1` | 1757911 | 98 → 113 | 0.0002 | 1.0 |
+| `run-small` (control) | 1757956 | 67 → 82 | 0.001 | 0.25 |
+| `run-small-lr2e4` | 1757957 | 67 → 82 | 0.0002 | 0.25 |
+
+All four receive equal resources: **one single-process self-play/trainer, one Torch thread, 16 concurrent games** per run. This replaces the old two spawned workers per control, keeping four aggregate search processes instead of eight workers plus four trainers. Controls remain active, not time-sliced. All retain 96 games, 100 simulations, c_puct 1.5, FPU reduction 0.2, Dirichlet alpha 0.15/fraction 0.25, temperature 1 for 30 moves, 300 updates ×128, 50k replay, mine weight 2 and the pair's existing seed. Targets are **15 additional completed iterations**, expressed as absolute `--iterations` values in the manifest. Runs stop automatically at their own targets; do not silently continue one arm farther than its mate.
+
+All four launched detached after the old controls exited gracefully. At the initial four-arm resource snapshot, GPU allocation was **1,645 / 8,188 MiB**, host RAM had **8,397 MiB available**, and swap use was 54 MiB. These are instantaneous startup observations, not peak-memory or throughput guarantees; no control pausing was needed.
+
+First completed iterations after restart (96 games and 50,000 replay positions each; value is the final 100-update block's unweighted training MSE):
+
+| Run | Iteration | New positions | Generation / train / save seconds | Value MSE | Bomb / safe / mine actions |
+|---|---:|---:|---:|---:|---:|
+| medium control | 99 | 7,717 | 592.45 / 9.56 / 0.151 | 0.249 | 184 / 4,217 / 3,316 |
+| medium vw1 | 99 | 7,651 | 580.67 / 9.40 / 0.107 | 0.247 | 180 / 4,155 / 3,316 |
+| small control | 68 | 10,347 | 872.02 / 7.14 / 0.175 | 0.500 | 151 / 6,706 / 3,490 |
+| small lr2e4 | 68 | 10,319 | 866.91 / 7.44 / 0.093 | 0.516 | 157 / 6,708 / 3,454 |
+
+All four published immutable checkpoints and reported exact counts for all 96 games; no warning/error text was found in their logs. Shared snapshot/seed does not imply bitwise-identical self-play: the observed first-iteration trajectories differ slightly, so treat the arms as controlled starting conditions, not identical replay trajectories. These first losses do not decide the trial. The first scheduled held-out validation is medium iteration 100 / small iteration 70; first-iteration `validation_seconds=0` is expected. Full initial records are in `/tmp/phase-b-first-iterations.json`.
+
+Every five iterations, each run keeps the 100-game greedy-vs-solver sentinel and additionally generates **16 separate fresh self-play games** (`--value-validation-every 5 --value-validation-games 16`). Those complete games never enter replay. Validation uses the current self-play search/noise/temperature distribution, a separate seed namespace, final outcome labels, and frozen post-update predictions; it reports value MSE, sign accuracy, zero/score-leader baselines and total-score bands. Positions within a game are correlated: these are not thousands of independent validation games. Set `--value-validation-every 0` to disable explicitly.
+
+`selfplay_games` now logs exact per-game moves/bomb/safe/mine counts, including terminal actions, and marks `split=replay|validation`. Iteration metrics separate `generation_seconds`, `training_seconds` (including replay encoding), `save_seconds` (replay plus checkpoint publication) and `validation_seconds`; total time also includes the greedy sentinel. Retention still occurs outside the iteration timer. Checkpoints now preserve their complete `training_settings`.
+
+The search value audit found **no sign/perspective defect for the supported odd-mine game**: backup follows player identity (not depth), mine openings retain the turn, bombs/safe openings pass it, chance outcomes share parent action statistics, and terminal winners override leaf estimates. The regression suite covers both players, terminal bombs, mixed chance outcomes, Q/FPU initialization and root reuse; `uv run pytest -q` passed **141 tests**. Fresh-root expansion consumes one simulation, and self-play subtree reuse retains visit counts; these explain differences from fresh-tree arena search, not incorrect value signs. Even-mine tie handling is outside the supported training configuration and was not changed.
+
+**Medium g80 search ablation:** immutable `selfplay-1794006042719861991.pt`, fresh trees/no noise, fixed independent layout seeds, both seats per layout, versus that same checkpoint's greedy policy:
+
+| Search setting | Wins / games | Win rate | Wilson 95% |
+|---|---:|---:|---:|
+| 100 sims, FPU 0.2, c=1.5 | 108 / 200 | 54.0% | 47.1–60.8% |
+| 200 sims, FPU 0.2, c=1.5 | 22 / 40 | 55.0% | 39.8–69.3% |
+| 100 sims, FPU 0, c=1.5 | 112 / 200 | 56.0% | 49.1–62.7% |
+| 100 sims, FPU 0.2, c=1.0 | 21 / 40 | 52.5% | 37.5–67.1% |
+| 100 sims, FPU 0.2, c=2.5 | 23 / 40 | 57.5% | 42.2–71.5% |
+
+FPU 0 won the exploratory 40-game screen, but its matched advantage over baseline is only **+2 percentage points, paired-layout bootstrap 95% −6 to +10**. On the 160-game extension excluding screening it scored 88 wins versus baseline's 89. No setting establishes an improvement; all trial arms therefore retain **100 sims/c=1.5/FPU=0.2**. Doubling simulations roughly halved measured games/hour (~538 versus ~1,031 for baseline) without established strength benefit. The other 40-game settings remain screening results, not adequately powered final comparisons.
+
+On 96 fixed positions (32 per early/mid/late score stratum, sampled from iteration 92 replay), baseline search agreed with prior argmax **76.0%**, versus **75.0%** for 200 sims and **79.2%** for FPU 0; visit support increased from 6.29 to 10.60/11.64. This larger stratified sample shows more policy changes than Phase A's 24-position sample: prior dominance is not universal. Greater exploration did not establish stronger play. Exact seeds, checkpoint hash, position snapshot and full measurements are retained in `/tmp/search_ablation.py`, `/tmp/search-ablation-positions.npz` and `/tmp/search-ablation-results.{json,txt}`.
+
+**Decision after 15 iterations:**
+
+1. Wait until both arms of a pair reach the manifest's target. Use immutable target checkpoints (or the now-stopped `latest.pt` files). Compare at equal generation count, not whichever run finished first.
+2. Run both greedy and fresh-tree/no-noise MCTS comparisons, **at least 200 games per mode and pair**. Every layout is independently seeded and played with both seats; action/search RNG cannot change later layouts:
+
+   ```sh
+   for mode in greedy mcts; do
+     uv run python -m msflags.compare --checkpoint-a checkpoints/run-medium-vw1/latest.pt --checkpoint-b checkpoints/run-medium/latest.pt --mode "$mode" --games 200 --seed 910000 --device cuda --threads 1
+     uv run python -m msflags.compare --checkpoint-a checkpoints/run-small-lr2e4/latest.pt --checkpoint-b checkpoints/run-small/latest.pt --mode "$mode" --games 200 --seed 920000 --device cuda --threads 1
+   done
+   ```
+
+3. Treat MCTS strength as primary; inspect fresh-game value error and greedy strength as guardrails. The comparator reports a whole-layout paired-bootstrap 95% interval. If it overlaps 50%, retain the control or expand to 400–800 games; do not declare a win from a noisy point estimate. Confirm an apparent winner on a fresh seed bank before adopting it.
+4. Promote **only the chosen immutable winner**, using `uv run python -m msflags.registry promote <checkpoint>`, and resume that arm's settings. Fork and control at the same iteration share the catalog's derived generation identity, so do not try to promote both. Keep the losing trial/checkpoint and its manifest as comparison provenance; do not repoint an existing generation.
+
+Never start another trainer into an active directory. Stop any current arm gracefully with `kill -TERM -- -"$(cat checkpoints/<run>/train.pid)"`, then wait for its complete iteration/checkpoint and process exit before relaunching. The manifest contains the exact detached commands; the historical commands below are not the four-arm launch configuration.
+
+
+### Historical round 2 launch and operation
 
 Both runs use **96 games / iteration, MCTS-100, c_puct=1.5, unchanged Dirichlet noise, 300 updates × 128 samples**, and 50,000-position replay. Each has two persistent spawned self-play processes, each batching 16 games with one Torch thread; the trainer uses two Torch threads. Equal CPU budgets avoid assigning all 20 hardware threads to either run. Each worker owns its CUDA evaluator; completed games merge in seed/batch order.
 
