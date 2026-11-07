@@ -147,3 +147,21 @@ def test_completed_q_masks_revealed_cells_and_consumed_bomb_inventory():
     assert not legal.all() and not legal[g.cfg.n:].any()
     assert pi.sum() == pytest.approx(1.)
     assert np.all(pi[~legal] == 0)
+
+
+def test_reuse_and_search_are_invariant_to_unobserved_real_mines():
+    first = game()
+    second = Game(first.cfg, np.array([True, False, False, False, False, True, False, False, True]))
+    for actual in (first, second):
+        actual.step(0)
+        actual.step(1)
+    np.testing.assert_array_equal(first.board, second.board)
+    agents = [MCTSAgent(evaluator, sims=32, rng=np.random.default_rng(37)) for _ in range(2)]
+    searches = [agent.search(actual.public()) for agent, actual in zip(agents, (first, second))]
+    np.testing.assert_array_equal(searches[0].root.N, searches[1].root.N)
+    np.testing.assert_array_equal(searches[0].root.W, searches[1].root.W)
+    assert searches[0].best_action() == searches[1].best_action()
+    # Opposite real layouts do not change the public-only descendant lookup.
+    observed = first.public()
+    assert searches[0].matching_root(observed) is searches[0].root
+    assert searches[1].matching_root(observed) is searches[1].root
