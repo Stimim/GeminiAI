@@ -11,7 +11,8 @@
       {"checkpoint": "checkpoints/run-medium/selfplay-1793997381678163485.pt", "training": {"bootstrap": 8000, "selfplay": 50}},
       {"checkpoint": "checkpoints/run-medium/selfplay-1794000174983395395.pt", "training": {"bootstrap": 8000, "selfplay": 60}},
       {"checkpoint": "checkpoints/run-medium/selfplay-1794003121009409453.pt", "training": {"bootstrap": 8000, "selfplay": 70}},
-      {"checkpoint": "checkpoints/run-medium/selfplay-1794006042719861991.pt", "training": {"bootstrap": 8000, "selfplay": 80}}
+      {"checkpoint": "checkpoints/run-medium/selfplay-1794006042719861991.pt", "training": {"bootstrap": 8000, "selfplay": 80}},
+      {"checkpoint": "checkpoints/run-medium/selfplay-1794025737856403222.pt", "training": {"bootstrap": 8000, "selfplay": 113}}
     ]
   },
   "r32x3": {
@@ -23,7 +24,8 @@
       {"checkpoint": "checkpoints/run-small/selfplay-1793991841941549630.pt", "training": {"bootstrap": 8000, "selfplay": 20}},
       {"checkpoint": "checkpoints/run-small/selfplay-1793996273346088599.pt", "training": {"bootstrap": 8000, "selfplay": 30}},
       {"checkpoint": "checkpoints/run-small/selfplay-1794000355088618269.pt", "training": {"bootstrap": 8000, "selfplay": 40}},
-      {"checkpoint": "checkpoints/run-small/selfplay-1794004487721795820.pt", "training": {"bootstrap": 8000, "selfplay": 50}}
+      {"checkpoint": "checkpoints/run-small/selfplay-1794004487721795820.pt", "training": {"bootstrap": 8000, "selfplay": 50}},
+      {"checkpoint": "checkpoints/run-small/selfplay-1794038775379820495.pt", "training": {"bootstrap": 8000, "selfplay": 82}}
     ]
   }
 }
