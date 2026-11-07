@@ -267,6 +267,100 @@ and the independent g181 snapshot remain on disk. All trial processes stopped;
 no subsequent experiment was launched.
 Final verification: `uv run pytest -q` — **201 passed in 29.79s**.
 
+### Stronger auxiliary arm: medium g181 → g201
+
+The first treatment's weighted auxiliary losses contributed only about **0.9%**
+of its objective. The second treatment, `checkpoints/run-medium-aux2`, starts
+again from the **same SHA-256-verified g181 checkpoint/optimizer/replay snapshot**,
+not from either g201 model. It reuses the existing control g201 instead of
+training another control.
+
+The new fixed weights are **2.0 for score-margin MSE** and **1.5 for ownership
+CE**. Using the observed raw losses `.027 / .45`, the expected contribution is
+`2 × .027 + 1.5 × .45 = .729`, or **20.6%** of the resulting objective
+(`.729 / (2.81 + .729)`). This calibration targets the requested 15–25% range.
+Missing labels in legacy replay remain masked: actual initial auxiliary share
+ramps up as newly labelled replay replaces old positions, and measured shares
+are retained per iteration rather than assuming the calibrated share was met.
+
+All non-auxiliary settings, including seed **720000**, are unchanged. Aux2 runs
+**alone**, with the same four one-thread workers and one trainer (`--cpu-share 5`);
+the reused control originally ran concurrently with the weaker auxiliary arm.
+Consequently wall-clock throughput is not a controlled comparison, although
+training/search budgets are unchanged. `checkpoints/aux2-trial.json` records
+exact argv, PIDs, source/replay/control hashes and the calibration.
+
+Held-out validation still uses 16 complete fresh games every five iterations,
+with value MSE and margin MAE; it now also logs **ownership accuracy restricted
+to true mines**, including unclaimed mines. Comparisons use fresh independent
+200-game paired-seat banks: aux2 versus control (greedy and fresh-tree/no-noise
+MCTS-100/K4), and aux2 versus g181 (greedy). As before, a positive primary MCTS
+estimate triggers an independent 400-game confirmation bank; only a credible
+winner can replace the already promoted control.
+
+Aux2 completed **20 iterations / 1,920 replay games**. Logged UTC times on
+**2026-11-07**: launch **17:38:47**, finish **18:26:02** (**47m15s**).
+Minimum sampled available RAM was **7,011 MiB**; all four workers were retained.
+Per-iteration losses and validation records live in
+`checkpoints/aux2-results/diagnostics.json`.
+
+Measured auxiliary objective share was **8.2% at g182**, because the initial
+50k legacy replay has no auxiliary labels, **18.0% at g186**, and **19.5% at
+g201**. Its mean per-iteration share was **17.9%**. Thus the requested
+15–25% share was reached after replay turnover, not at the literal first
+iteration; the fixed weights were not tuned mid-run.
+
+| Mean training loss over 20 iterations | Aux2 raw | Weighted contribution |
+|---|---:|---:|
+| Policy CE | 2.0631 | 2.0631 |
+| Win/loss value MSE | .2251 | .0563 |
+| Mine BCE | .3630 | .7260 |
+| Score-margin MSE | .0252 | .0504 |
+| Ownership CE | .3836 | .5754 |
+
+Auxiliary losses now contribute **.6258**, versus **2.8453** from the original
+losses—substantial supervision, rather than the first arm's **.0254**.
+
+| Held-out iteration | Value MSE, reused control / aux2 | Aux2 margin MAE, score points | Aux2 mine-ownership accuracy |
+|---|---|---:|---:|
+| 185 | .623 / .818 | 3.42 | 75.44% |
+| 190 | .644 / .841 | 5.09 | 75.82% |
+| 195 | .540 / .962 | 4.96 | 76.20% |
+| 200 | .909 / .906 | 4.64 | 76.53% |
+
+Ownership accuracy covers **all true mines**, including already claimed and
+unclaimed mines, and excludes safe cells. The stronger heads learn their
+targets, but value MSE still does not consistently beat the control. As before,
+these are correlated positions from separate small self-play cohorts.
+
+All comparisons use fresh independent layout pairs and alternate seats.
+The marginally positive first MCTS estimate triggered the predeclared
+**400-game independent confirmation bank**. Its result did not establish a gain.
+Comparisons finished at **19:12:04 UTC**; the initial and confirmation MCTS banks
+took **927 / 1,801 seconds**.
+
+| First side versus second | Mode | First-side wins | Win rate [paired 95% CI] | Seed bank |
+|---|---|---:|---|---:|
+| Aux2 g201 vs control g201 | Greedy | 97/200 | 48.5% [41.0–56.0%] | 8510000 |
+| Aux2 g201 vs control g201 | MCTS-100/K4 | 101/200 | 50.5% [43.5–57.5%] | 8520000 |
+| Aux2 g201 vs start g181 | Greedy | 102/200 | 51.0% [45.0–57.0%] | 8530000 |
+| Aux2 g201 vs control g201, confirmation | MCTS-100/K4 | 198/400 | 49.5% [44.7–54.5%] | 8540000 |
+
+**Decision: retain the already published control g201.** Meaningful auxiliary
+loss weight did not yield a credible playing-strength improvement in this
+continuation. This is not proof that auxiliary targets cannot help, nor evidence
+of a definitive regression. No additional checkpoint was promoted; defaults
+remain off, and registry categories/architecture visualization remain unchanged.
+Published IDs are still **`r64x4-bs8k-sp201.greedy`** and
+**`r64x4-bs8k-sp201.mcts100-c1.5`**.
+
+The immutable aux2 final is
+`checkpoints/run-medium-aux2/selfplay-1794075958858975485.pt`.
+`checkpoints/aux2-trial.json` and `checkpoints/aux2-results/summary.json`
+retain hashes, exact launch/comparison argv and PIDs, outcomes and decision.
+All experiment processes stopped; no further training was launched.
+Final verification: `uv run pytest -q` — **202 passed in 28.38s**.
+
 ### Exploration trial: medium g161 → g181
 
 **Outcome: retain control exploration; no credible strength improvement.**

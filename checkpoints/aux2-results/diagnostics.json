@@ -1,0 +1,487 @@
+{
+  "iterations": [
+    {
+      "iteration": 182,
+      "policy_loss": 2.024933119614919,
+      "value_loss": 0.24232498866816363,
+      "mine_loss": 0.3610277976592382,
+      "score_margin_loss": 0.008231716677352476,
+      "mine_ownership_loss": 0.15664570748806,
+      "weighted_score_margin_loss": 0.016463433354704952,
+      "weighted_mine_ownership_loss": 0.23496856123209,
+      "weighted_original": 2.8075699621004366,
+      "weighted_auxiliary": 0.25143199458679494,
+      "auxiliary_objective_share": 0.08219412675992044
+    },
+    {
+      "iteration": 183,
+      "policy_loss": 2.029234431584676,
+      "value_loss": 0.254814946030577,
+      "mine_loss": 0.36199189970890683,
+      "score_margin_loss": 0.012173877799262604,
+      "mine_ownership_loss": 0.22649666771292687,
+      "weighted_score_margin_loss": 0.024347755598525207,
+      "weighted_mine_ownership_loss": 0.3397450015693903,
+      "weighted_original": 2.816921967510134,
+      "weighted_auxiliary": 0.3640927571679155,
+      "auxiliary_objective_share": 0.11445805464002225
+    },
+    {
+      "iteration": 184,
+      "policy_loss": 2.051891580025355,
+      "value_loss": 0.2346244050686558,
+      "mine_loss": 0.3628024890025457,
+      "score_margin_loss": 0.01705246100512644,
+      "mine_ownership_loss": 0.27906002968549726,
+      "weighted_score_margin_loss": 0.03410492201025288,
+      "weighted_mine_ownership_loss": 0.41859004452824594,
+      "weighted_original": 2.8361526592976105,
+      "weighted_auxiliary": 0.45269496653849883,
+      "auxiliary_objective_share": 0.13764546675324071
+    },
+    {
+      "iteration": 185,
+      "policy_loss": 2.0171684888998667,
+      "value_loss": 0.2432380276421706,
+      "mine_loss": 0.36214976241191227,
+      "score_margin_loss": 0.02028853337901334,
+      "mine_ownership_loss": 0.31843537926673887,
+      "weighted_score_margin_loss": 0.04057706675802668,
+      "weighted_mine_ownership_loss": 0.47765306890010834,
+      "weighted_original": 2.802277520634234,
+      "weighted_auxiliary": 0.518230135658135,
+      "auxiliary_objective_share": 0.1560695499906732
+    },
+    {
+      "iteration": 186,
+      "policy_loss": 2.0503735729058583,
+      "value_loss": 0.23089868783950807,
+      "mine_loss": 0.36374586125214897,
+      "score_margin_loss": 0.025589190172031522,
+      "mine_ownership_loss": 0.38035338997840884,
+      "weighted_score_margin_loss": 0.051178380344063044,
+      "weighted_mine_ownership_loss": 0.5705300849676133,
+      "weighted_original": 2.835589967370033,
+      "weighted_auxiliary": 0.6217084653116763,
+      "auxiliary_objective_share": 0.17982493482040487
+    },
+    {
+      "iteration": 187,
+      "policy_loss": 2.078813869555791,
+      "value_loss": 0.22302666346232097,
+      "mine_loss": 0.36506662984689076,
+      "score_margin_loss": 0.029166618936384718,
+      "mine_ownership_loss": 0.4274694254000982,
+      "weighted_score_margin_loss": 0.058333237872769436,
+      "weighted_mine_ownership_loss": 0.6412041381001472,
+      "weighted_original": 2.864703795115153,
+      "weighted_auxiliary": 0.6995373759729167,
+      "auxiliary_objective_share": 0.1962654440017498
+    },
+    {
+      "iteration": 188,
+      "policy_loss": 2.0812421528498333,
+      "value_loss": 0.22025164224207402,
+      "mine_loss": 0.3641158884763718,
+      "score_margin_loss": 0.029564062692224977,
+      "mine_ownership_loss": 0.425476477543513,
+      "weighted_score_margin_loss": 0.059128125384449955,
+      "weighted_mine_ownership_loss": 0.6382147163152695,
+      "weighted_original": 2.8645368403630953,
+      "weighted_auxiliary": 0.6973428416997195,
+      "auxiliary_objective_share": 0.19577944903963257
+    },
+    {
+      "iteration": 189,
+      "policy_loss": 2.0824159483114877,
+      "value_loss": 0.20933442704379557,
+      "mine_loss": 0.3649269589781761,
+      "score_margin_loss": 0.028321184845020372,
+      "mine_ownership_loss": 0.42557783673206967,
+      "weighted_score_margin_loss": 0.056642369690040745,
+      "weighted_mine_ownership_loss": 0.6383667550981045,
+      "weighted_original": 2.864603473028789,
+      "weighted_auxiliary": 0.6950091247881452,
+      "auxiliary_objective_share": 0.19524852935243167
+    },
+    {
+      "iteration": 190,
+      "policy_loss": 2.081681049664815,
+      "value_loss": 0.22488793422778447,
+      "mine_loss": 0.3641826022664706,
+      "score_margin_loss": 0.027629807411382597,
+      "mine_ownership_loss": 0.4221818900108338,
+      "weighted_score_margin_loss": 0.055259614822765195,
+      "weighted_mine_ownership_loss": 0.6332728350162506,
+      "weighted_original": 2.866268237754702,
+      "weighted_auxiliary": 0.6885324498390158,
+      "auxiliary_objective_share": 0.19369087337076296
+    },
+    {
+      "iteration": 191,
+      "policy_loss": 2.096737656593323,
+      "value_loss": 0.222112532282869,
+      "mine_loss": 0.3634325995047887,
+      "score_margin_loss": 0.027862838003784418,
+      "mine_ownership_loss": 0.4196733980377515,
+      "weighted_score_margin_loss": 0.055725676007568836,
+      "weighted_mine_ownership_loss": 0.6295100970566273,
+      "weighted_original": 2.8791309886736176,
+      "weighted_auxiliary": 0.6852357730641961,
+      "auxiliary_objective_share": 0.1922461460531935
+    },
+    {
+      "iteration": 192,
+      "policy_loss": 2.0412245345115663,
+      "value_loss": 0.2243452682097753,
+      "mine_loss": 0.363375695447127,
+      "score_margin_loss": 0.027078527038296062,
+      "mine_ownership_loss": 0.4189065334200859,
+      "weighted_score_margin_loss": 0.054157054076592125,
+      "weighted_mine_ownership_loss": 0.6283598001301288,
+      "weighted_original": 2.824062242458264,
+      "weighted_auxiliary": 0.6825168542067209,
+      "auxiliary_objective_share": 0.1946389445074388
+    },
+    {
+      "iteration": 193,
+      "policy_loss": 2.064345209201177,
+      "value_loss": 0.20364425230771305,
+      "mine_loss": 0.3601324130098025,
+      "score_margin_loss": 0.025870639495551587,
+      "mine_ownership_loss": 0.41400064537922543,
+      "weighted_score_margin_loss": 0.05174127899110317,
+      "weighted_mine_ownership_loss": 0.6210009680688381,
+      "weighted_original": 2.8355210982977104,
+      "weighted_auxiliary": 0.6727422470599412,
+      "auxiliary_objective_share": 0.19175933527058475
+    },
+    {
+      "iteration": 194,
+      "policy_loss": 2.066870661576589,
+      "value_loss": 0.20642512815694014,
+      "mine_loss": 0.3606109394629796,
+      "score_margin_loss": 0.026380153298377992,
+      "mine_ownership_loss": 0.4164123609662056,
+      "weighted_score_margin_loss": 0.052760306596755985,
+      "weighted_mine_ownership_loss": 0.6246185414493084,
+      "weighted_original": 2.8396988225417834,
+      "weighted_auxiliary": 0.6773788480460644,
+      "auxiliary_objective_share": 0.19259706821682065
+    },
+    {
+      "iteration": 195,
+      "policy_loss": 2.071839090188344,
+      "value_loss": 0.2049968228985866,
+      "mine_loss": 0.36115858107805254,
+      "score_margin_loss": 0.026615548652286332,
+      "mine_ownership_loss": 0.4157324770092964,
+      "weighted_score_margin_loss": 0.053231097304572664,
+      "weighted_mine_ownership_loss": 0.6235987155139446,
+      "weighted_original": 2.845405458069096,
+      "weighted_auxiliary": 0.6768298128185173,
+      "auxiliary_objective_share": 0.19215917187949638
+    },
+    {
+      "iteration": 196,
+      "policy_loss": 2.0608204321066537,
+      "value_loss": 0.21449294283986092,
+      "mine_loss": 0.3611369694272677,
+      "score_margin_loss": 0.027951837138583263,
+      "mine_ownership_loss": 0.4160778892040253,
+      "weighted_score_margin_loss": 0.055903674277166526,
+      "weighted_mine_ownership_loss": 0.6241168338060379,
+      "weighted_original": 2.8367176066711544,
+      "weighted_auxiliary": 0.6800205080832045,
+      "auxiliary_objective_share": 0.19336683196004867
+    },
+    {
+      "iteration": 197,
+      "policy_loss": 2.0588355747858684,
+      "value_loss": 0.23727299412091574,
+      "mine_loss": 0.3615939904252688,
+      "score_margin_loss": 0.028992307080576818,
+      "mine_ownership_loss": 0.41754137029250465,
+      "weighted_score_margin_loss": 0.057984614161153636,
+      "weighted_mine_ownership_loss": 0.626312055438757,
+      "weighted_original": 2.841341804166635,
+      "weighted_auxiliary": 0.6842966695999106,
+      "auxiliary_objective_share": 0.1940915594981172
+    },
+    {
+      "iteration": 198,
+      "policy_loss": 2.0513552725315094,
+      "value_loss": 0.2430636979887883,
+      "mine_loss": 0.36229958216349284,
+      "score_margin_loss": 0.029692316899696987,
+      "mine_ownership_loss": 0.41884134699900943,
+      "weighted_score_margin_loss": 0.059384633799393974,
+      "weighted_mine_ownership_loss": 0.6282620204985142,
+      "weighted_original": 2.836720361355692,
+      "weighted_auxiliary": 0.6876466542979082,
+      "auxiliary_objective_share": 0.1951121013344244
+    },
+    {
+      "iteration": 199,
+      "policy_loss": 2.08152951558431,
+      "value_loss": 0.24343457338710625,
+      "mine_loss": 0.36371624559164045,
+      "score_margin_loss": 0.029524767994880678,
+      "mine_ownership_loss": 0.42058287541071576,
+      "weighted_score_margin_loss": 0.059049535989761356,
+      "weighted_mine_ownership_loss": 0.6308743131160736,
+      "weighted_original": 2.8698206501143675,
+      "weighted_auxiliary": 0.6899238491058349,
+      "auxiliary_objective_share": 0.1938127439362487
+    },
+    {
+      "iteration": 200,
+      "policy_loss": 2.084097086985906,
+      "value_loss": 0.21521977027257283,
+      "mine_loss": 0.36645214915275576,
+      "score_margin_loss": 0.02847322585682074,
+      "mine_ownership_loss": 0.42591624716917675,
+      "weighted_score_margin_loss": 0.05694645171364148,
+      "weighted_mine_ownership_loss": 0.6388743707537651,
+      "weighted_original": 2.8708063278595604,
+      "weighted_auxiliary": 0.6958208224674065,
+      "auxiliary_objective_share": 0.1950921117178222
+    },
+    {
+      "iteration": 201,
+      "policy_loss": 2.0861907772223156,
+      "value_loss": 0.20424346829454104,
+      "mine_loss": 0.3657429657379786,
+      "score_margin_loss": 0.027985198634366194,
+      "mine_ownership_loss": 0.4265867871046066,
+      "weighted_score_margin_loss": 0.05597039726873239,
+      "weighted_mine_ownership_loss": 0.63988018065691,
+      "weighted_original": 2.868737575771908,
+      "weighted_auxiliary": 0.6958505779256424,
+      "auxiliary_objective_share": 0.1952120547794101
+    }
+  ],
+  "validation": [
+    {
+      "event": "value_validation",
+      "time": 1794073703.0819118,
+      "games": 16,
+      "positions": 1456,
+      "seed": 1000737760,
+      "policy": "selfplay",
+      "replay_inserted": false,
+      "mse": 0.8184449076652527,
+      "zero_mse": 1.0,
+      "score_leader_accuracy": 0.7836538461538461,
+      "accuracy": 0.7568681318681318,
+      "prediction_mean": 0.08235933631658554,
+      "target_mean": 0.07005494832992554,
+      "score_bands": [
+        {
+          "score_min": 0,
+          "score_max_exclusive": 10,
+          "positions": 107,
+          "mse": 0.909748911857605,
+          "accuracy": 0.6448598130841121
+        },
+        {
+          "score_min": 10,
+          "score_max_exclusive": 25,
+          "positions": 387,
+          "mse": 0.9677656888961792,
+          "accuracy": 0.7080103359173127
+        },
+        {
+          "score_min": 25,
+          "score_max_exclusive": 40,
+          "positions": 656,
+          "mse": 0.5226831436157227,
+          "accuracy": 0.864329268292683
+        },
+        {
+          "score_min": 40,
+          "score_max_exclusive": 53,
+          "positions": 306,
+          "mse": 1.2317225933074951,
+          "accuracy": 0.6274509803921569
+        }
+      ],
+      "generation_seconds": 57.295683508971706,
+      "seconds": 58.027556848013774,
+      "score_margin_mse": 0.030840145900638133,
+      "score_margin_mae_points": 3.4196906867265957,
+      "mine_ownership_accuracy": 0.7544440853264383,
+      "mine_ownership_cells": 74256,
+      "iteration": 185
+    },
+    {
+      "event": "value_validation",
+      "time": 1794074369.5194068,
+      "games": 16,
+      "positions": 1464,
+      "seed": 1000738240,
+      "policy": "selfplay",
+      "replay_inserted": false,
+      "mse": 0.8405897617340088,
+      "zero_mse": 1.0,
+      "score_leader_accuracy": 0.773224043715847,
+      "accuracy": 0.7206284153005464,
+      "prediction_mean": 0.05721326917409897,
+      "target_mean": 0.07786884903907776,
+      "score_bands": [
+        {
+          "score_min": 0,
+          "score_max_exclusive": 10,
+          "positions": 94,
+          "mse": 0.8829801678657532,
+          "accuracy": 0.6595744680851063
+        },
+        {
+          "score_min": 10,
+          "score_max_exclusive": 25,
+          "positions": 497,
+          "mse": 1.13605535030365,
+          "accuracy": 0.6096579476861167
+        },
+        {
+          "score_min": 25,
+          "score_max_exclusive": 40,
+          "positions": 610,
+          "mse": 0.7612919807434082,
+          "accuracy": 0.7639344262295082
+        },
+        {
+          "score_min": 40,
+          "score_max_exclusive": 53,
+          "positions": 263,
+          "mse": 0.4510101079940796,
+          "accuracy": 0.8517110266159695
+        }
+      ],
+      "generation_seconds": 66.46444812498521,
+      "seconds": 66.89587087894324,
+      "score_margin_mse": 0.05834487294267781,
+      "score_margin_mae_points": 5.085234102415324,
+      "mine_ownership_accuracy": 0.7581699346405228,
+      "mine_ownership_cells": 74664,
+      "iteration": 190
+    },
+    {
+      "event": "value_validation",
+      "time": 1794075096.8800514,
+      "games": 16,
+      "positions": 1694,
+      "seed": 1000738720,
+      "policy": "selfplay",
+      "replay_inserted": false,
+      "mse": 0.9618846774101257,
+      "zero_mse": 1.0,
+      "score_leader_accuracy": 0.679456906729634,
+      "accuracy": 0.7113341204250295,
+      "prediction_mean": -0.023702790960669518,
+      "target_mean": 0.07674144208431244,
+      "score_bands": [
+        {
+          "score_min": 0,
+          "score_max_exclusive": 10,
+          "positions": 108,
+          "mse": 0.9434574842453003,
+          "accuracy": 0.6018518518518519
+        },
+        {
+          "score_min": 10,
+          "score_max_exclusive": 25,
+          "positions": 508,
+          "mse": 0.8604261875152588,
+          "accuracy": 0.7263779527559056
+        },
+        {
+          "score_min": 25,
+          "score_max_exclusive": 40,
+          "positions": 709,
+          "mse": 1.3378145694732666,
+          "accuracy": 0.6361071932299013
+        },
+        {
+          "score_min": 40,
+          "score_max_exclusive": 53,
+          "positions": 369,
+          "mse": 0.38464033603668213,
+          "accuracy": 0.8672086720867209
+        }
+      ],
+      "generation_seconds": 75.85820830101147,
+      "seconds": 76.3387528260937,
+      "score_margin_mse": 0.06341978496338659,
+      "score_margin_mae_points": 4.956585565365305,
+      "mine_ownership_accuracy": 0.7619742111720721,
+      "mine_ownership_cells": 86394,
+      "iteration": 195
+    },
+    {
+      "event": "value_validation",
+      "time": 1794075831.8378055,
+      "games": 16,
+      "positions": 1329,
+      "seed": 1000739200,
+      "policy": "selfplay",
+      "replay_inserted": false,
+      "mse": 0.9055401682853699,
+      "zero_mse": 1.0,
+      "score_leader_accuracy": 0.7479307750188111,
+      "accuracy": 0.7200902934537246,
+      "prediction_mean": 0.09486351162195206,
+      "target_mean": 0.056433409452438354,
+      "score_bands": [
+        {
+          "score_min": 0,
+          "score_max_exclusive": 10,
+          "positions": 109,
+          "mse": 1.2147408723831177,
+          "accuracy": 0.5688073394495413
+        },
+        {
+          "score_min": 10,
+          "score_max_exclusive": 25,
+          "positions": 367,
+          "mse": 1.2854840755462646,
+          "accuracy": 0.5885558583106267
+        },
+        {
+          "score_min": 25,
+          "score_max_exclusive": 40,
+          "positions": 531,
+          "mse": 0.6497476696968079,
+          "accuracy": 0.8041431261770244
+        },
+        {
+          "score_min": 40,
+          "score_max_exclusive": 53,
+          "positions": 322,
+          "mse": 0.789650559425354,
+          "accuracy": 0.782608695652174
+        }
+      ],
+      "generation_seconds": 55.658254617941566,
+      "seconds": 56.11523897398729,
+      "score_margin_mse": 0.05267860596359101,
+      "score_margin_mae_points": 4.640654475671331,
+      "mine_ownership_accuracy": 0.765281281812951,
+      "mine_ownership_cells": 67779,
+      "iteration": 200
+    }
+  ],
+  "mean_losses": {
+    "policy_loss": 2.0630800012350083,
+    "value_loss": 0.22513265864923596,
+    "mine_loss": 0.36298310103019077,
+    "score_margin_loss": 0.025222240650551005,
+    "mine_ownership_loss": 0.3835984367405375,
+    "weighted_score_margin_loss": 0.05044448130110201,
+    "weighted_mine_ownership_loss": 0.5753976551108062,
+    "weighted_original": 2.845329367957699,
+    "weighted_auxiliary": 0.6258421364119082,
+    "auxiliary_objective_share": 0.17906322489412219
+  },
+  "games": 1920
+}

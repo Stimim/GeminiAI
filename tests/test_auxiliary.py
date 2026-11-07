@@ -85,3 +85,34 @@ def test_auxiliary_generation_ids_distinct():
     assert len({architecture_key(shape) for shape in variants}) == 4
     ids = {_neural_entry('unused.pt', None, shape=shape, training=dict(bootstrap=8000, selfplay=181))['id'] for shape in variants}
     assert len(ids) == 4
+
+
+def test_held_out_ownership_accuracy_masks_safe_cells(monkeypatch):
+    from argparse import Namespace
+    from msflags import train
+    from msflags.model import Evaluator
+
+    cfg = Config(6, 6, 5)
+    mines = np.zeros(cfg.n, bool)
+    mines[[0, 1, 2, 30, 35]] = True
+    game = Game(cfg, mines)
+    positions = [Position(game.board.copy(), [0, 0], player, np.zeros(2 * cfg.n),
+                          np.zeros(cfg.n), [1, 1]) for player in (0, 1)]
+    game.to_move = 1
+    game.step(35)
+    game.to_move = 0
+    game.step(cfg.n)
+    finish_targets(positions, game)
+    data = train.pack(positions, cfg)
+    monkeypatch.setattr(train, 'selfplay_games', lambda *args: data)
+    records = []
+    monkeypatch.setattr(train, 'log', lambda args, event, **fields: records.append(fields))
+    # Zero-initialized ownership logits predict class 0 at every cell.
+    net = Net(NetConfig(channels=8, blocks=1, mine_ownership=True)).eval()
+    evaluator = Evaluator(net, 'cpu')
+    args = Namespace(size=6, mines=5, games=96, value_validation_games=1)
+    train.validate_value(args, evaluator, 123)
+    result = records[-1]
+    assert result['mine_ownership_cells'] == 10
+    assert result['mine_ownership_accuracy'] == .4
+    assert 'score_margin_mse' not in result

@@ -467,6 +467,7 @@ def validate_value(args, evaluator, seed):
     generation_seconds = time.monotonic() - started
     predictions = []
     margin_predictions = []
+    ownership_correct = ownership_count = 0
     cfg = Config(args.size, args.size, args.mines)
     for offset in range(0, len(data['board']), 128):
         part = slice(offset, offset + 128)
@@ -474,11 +475,19 @@ def validate_value(args, evaluator, seed):
                           data['player'][part], data['bombs'][part]))
         _, values, _ = evaluator(states, cfg)
         predictions.append(values)
-        if getattr(getattr(getattr(evaluator, 'net', None), 'cfg', None), 'score_margin', False):
+        net_cfg = getattr(getattr(evaluator, 'net', None), 'cfg', None)
+        if getattr(net_cfg, 'score_margin', False) or getattr(net_cfg, 'mine_ownership', False):
             with torch.inference_mode():
                 inputs = torch.as_tensor(encode_batch(states, cfg), device=evaluator.device)
-                predicted = evaluator.net(inputs, auxiliary=True)[3]
-                margin_predictions.append(predicted.float().cpu().numpy())
+                _, _, _, predicted_margin, predicted_ownership = evaluator.net(inputs, auxiliary=True)
+                if predicted_margin is not None:
+                    margin_predictions.append(predicted_margin.float().cpu().numpy())
+                if predicted_ownership is not None:
+                    predicted_labels = predicted_ownership.argmax(1).cpu().numpy()
+                    labels = data['ownership'][part]
+                    mask = labels >= 0
+                    ownership_correct += int(((predicted_labels == labels) & mask).sum())
+                    ownership_count += int(mask.sum())
     values = np.concatenate(predictions)
     target = data['value']
     rows = np.arange(len(target))
@@ -500,6 +509,9 @@ def validate_value(args, evaluator, seed):
                         data['final_scores'][rows, 1 - data['player']]) / cfg.win_score
         margin_diagnostics = dict(score_margin_mse=float(np.mean((predicted_margin - final_margin) ** 2)),
                                   score_margin_mae_points=float(np.mean(np.abs(predicted_margin - final_margin)) * cfg.win_score))
+    if ownership_count:
+        margin_diagnostics.update(mine_ownership_accuracy=ownership_correct / ownership_count,
+                                  mine_ownership_cells=ownership_count)
     log(args, 'value_validation', games=validation_args.games, positions=len(target),
         seed=seed, policy='selfplay', replay_inserted=False,
         mse=float(np.mean((values - target) ** 2)),
