@@ -22,19 +22,32 @@ class RolloutAgent(Agent):
     name = "rollout"
 
     def __init__(self, evaluator, rng: np.random.Generator | None = None, *, candidates: int = 6,
-                 rollouts: int = 32, margin_weight: float = 0.02, horizon: int = 400):
+                 rollouts: int = 32, margin_weight: float = 0.02, horizon: int = 400,
+                 turns: int = 0, bomb_value: float = 2.5, win_value: float = 30.0):
+        """``turns=0`` plays to the end and scores win/loss (+ margin_weight × margin).
+
+        ``turns=k`` stops each playout after k changes of turn and scores it in
+        mines: margin, plus the certain mines the side to move can claim, plus
+        ``bomb_value`` per unused bomb (signed by owner); finished games score
+        ``±win_value``.
+        """
         self.ev = evaluator
         self.rng = rng or np.random.default_rng()
         self.candidates = candidates
         self.rollouts = rollouts
         self.margin_weight = margin_weight
         self.horizon = horizon
+        self.turns = turns
+        self.bomb_value = bomb_value
+        self.win_value = win_value
+
+    def _seed(self) -> int:
+        return int(self.rng.integers(0, np.iinfo(np.uint64).max, dtype=np.uint64))
 
     def _greedy(self, games: list[Game], cfg) -> list[int]:
         states = [(g.board, g.scores, g.to_move, g.bombs) for g in games]
         probs = batch_probs(np.array([g.board for g in games], dtype=np.int8),
-                            np.array([g.scores for g in games]), cfg,
-                            seed=int(self.rng.integers(0, np.iinfo(np.uint64).max, dtype=np.uint64)))
+                            np.array([g.scores for g in games]), cfg, seed=self._seed())
         policy, _, _ = self.ev(states, cfg, probs)
         actions = []
         for g, pi, p in zip(games, policy, probs):
@@ -64,17 +77,37 @@ class RolloutAgent(Agent):
                 g.step(int(a))
                 games.append(g)
                 owner.append(ci)
-        live = [g for g in games if not g.done]
+        changes = [int(g.to_move != me) for g in games]
+        live = [i for i, g in enumerate(games) if not g.done and (not self.turns or changes[i] < self.turns)]
         steps = 0
         while live and steps < self.horizon:
-            for g, a in zip(live, self._greedy(live, cfg)):
-                g.step(a)
-            live = [g for g in live if not g.done]
+            before = [games[i].to_move for i in live]
+            for i, a in zip(live, self._greedy([games[i] for i in live], cfg)):
+                games[i].step(a)
+            for i, mover in zip(live, before):
+                changes[i] += games[i].to_move != mover and not games[i].done
+            live = [i for i in live if not games[i].done and (not self.turns or changes[i] < self.turns)]
             steps += 1
         totals = np.zeros(len(cand))
+        if not self.turns:
+            for g, ci in zip(games, owner):
+                win = 1.0 if g.winner == me else -1.0
+                totals[ci] += win + self.margin_weight * (g.scores[me] - g.scores[1 - me])
+            return int(cand[int(np.argmax(totals))])
+        open_games = [g for g in games if not g.done]
+        sure = {}
+        if open_games:
+            probs = batch_probs(np.array([g.board for g in open_games], dtype=np.int8),
+                                np.array([g.scores for g in open_games]), cfg, seed=self._seed())
+            for g, p in zip(open_games, probs):
+                sure[id(g)] = int(((g.board == UNKNOWN) & (p >= 1 - EPS)).sum())
         for g, ci in zip(games, owner):
-            win = 1.0 if g.winner == me else -1.0
-            totals[ci] += win + self.margin_weight * (g.scores[me] - g.scores[1 - me])
+            if g.done:
+                totals[ci] += self.win_value if g.winner == me else -self.win_value
+                continue
+            sign = 1.0 if g.to_move == me else -1.0
+            totals[ci] += (g.scores[me] - g.scores[1 - me] + sign * sure[id(g)]
+                           + self.bomb_value * (g.bombs[me] - g.bombs[1 - me]))
         return int(cand[int(np.argmax(totals))])
 
 
