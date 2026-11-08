@@ -128,6 +128,10 @@ The reset archived **100** retired-agent games and retained **21** solver/random
 
 `msflags/expert.py` (`ExpertAgent`) claims certain mines first; otherwise it maximizes `p/(1-p)` (guess value, `cap` 0.9) or a bomb's expected mines minus `bomb_reserve`, minus the expected opponent advantage: certain mines plus `alpha` × their best guess value, averaged over clue outcomes from `samples` consistent layouts. It reads only the public board.
 
+`ExpertAgent(native=True)` (default) scores reveals and bombs in C, reusing the exact native probability engine without Python calls per outcome. `native=False` retains the Python reference; custom `analysis=` implementations also retain that path. Candidate selection stays in Python, and opponent-analysis seeds are consumed in identical first-seen outcome order, so seeded actions and subsequent RNG state agree. Exact component statistics are cached only within a decision; randomized fallback analyses are never shared.
+
+Measured on three default 16×16 expert-vs-expert games (layout seeds 4200–4202; player seeds `4300 + 2*game + seat`; default agent parameters), all 265 scored decisions and complete move histories matched: Python **52.79 ms/decision**, native **10.48 ms/decision** (**5.04×**); medians 51.46 / 8.01 ms. This excludes certain-mine claims that bypass scoring and compilation, and is below the 10× performance target.
+
 `msflags/bench.py` runs unrecorded paired-layout matches in parallel: `uv run python -m msflags.bench expert:bomb_reserve=3 solver --layouts 300 --workers 18`. Against the solver (600 games, seed 7000): default expert **84.0%** (95% CI 81.2–86.8), `bomb_reserve=3` **85.7%** (82.7–88.5), `alpha=2` 78.2%, `samples=128` 82.2%, `interior_candidates=40` 80.3%.
 
 ## Web UI

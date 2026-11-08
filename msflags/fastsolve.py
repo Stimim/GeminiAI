@@ -15,6 +15,7 @@ are reproducible but not identical to Analysis's NumPy stream.
 from __future__ import annotations
 
 import ctypes
+import copy
 import hashlib
 import operator
 import os
@@ -115,3 +116,52 @@ class FastAnalysis:
         if n and not _LIB.fs_sample_many(self._handle, n, _seed(rng if rng is not None else self.rng), result.ctypes.data):
             raise MemoryError("could not allocate native sampling workspace")
         return result
+
+
+_LIB.fs_expert_scores.argtypes = [
+    ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_void_p,
+    ctypes.c_void_p, ctypes.c_int, ctypes.c_void_p, ctypes.c_size_t,
+    ctypes.c_void_p, ctypes.c_void_p, ctypes.c_size_t, ctypes.c_void_p,
+    ctypes.c_void_p, ctypes.c_size_t, ctypes.c_double, ctypes.c_double,
+    ctypes.c_double, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+    ctypes.POINTER(ctypes.c_size_t), ctypes.POINTER(ctypes.c_size_t), ctypes.c_char_p,
+]
+_LIB.fs_expert_scores.restype = ctypes.c_int
+
+
+def expert_scores_native(pub: PublicState, layouts: np.ndarray, probs: np.ndarray,
+                         candidates, bomb_centres, bomb_expected, *,
+                         alpha: float, cap: float, bomb_reserve: float,
+                         rng: np.random.Generator) -> tuple[np.ndarray, np.ndarray]:
+    """Score sampled outcomes in C, preserving FastAnalysis's RNG consumption.
+
+    A cloned stream supplies an upper bound of seeds. Only cache misses consume
+    the original stream, in the same first-seen order as the Python evaluator.
+    """
+    cfg = pub.cfg
+    board = np.ascontiguousarray(pub.board, dtype=np.int8)
+    layouts = np.ascontiguousarray(layouts, dtype=np.bool_)
+    probs = np.ascontiguousarray(probs, dtype=np.float64)
+    candidates = np.ascontiguousarray(candidates, dtype=np.int32)
+    centres = np.ascontiguousarray(bomb_centres, dtype=np.int32)
+    expected = np.ascontiguousarray(bomb_expected, dtype=np.float64)
+    scores = np.ascontiguousarray(pub.scores, dtype=np.int32)
+    maximum = (len(candidates) + len(centres)) * len(layouts)
+    seeds = copy.deepcopy(rng).integers(0, np.iinfo(np.uint64).max,
+                                      size=maximum, dtype=np.uint64)
+    actions = np.empty(len(candidates) + len(centres), dtype=np.int32)
+    values = np.empty(len(actions), dtype=np.float64)
+    count, used = ctypes.c_size_t(), ctypes.c_size_t()
+    error = ctypes.create_string_buffer(256)
+    ok = _LIB.fs_expert_scores(
+        cfg.h, cfg.w, cfg.mines, board.ctypes.data, scores.ctypes.data,
+        pub.to_move, layouts.ctypes.data, len(layouts), probs.ctypes.data,
+        candidates.ctypes.data, len(candidates), centres.ctypes.data,
+        expected.ctypes.data, len(centres), alpha, cap, bomb_reserve,
+        seeds.ctypes.data, actions.ctypes.data, values.ctypes.data,
+        ctypes.byref(count), ctypes.byref(used), error,
+    )
+    rng.integers(0, np.iinfo(np.uint64).max, size=used.value, dtype=np.uint64)
+    if not ok:
+        raise ValueError(error.value.decode())
+    return actions[:count.value], values[:count.value]

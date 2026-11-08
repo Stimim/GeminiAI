@@ -20,7 +20,7 @@ import numpy as np
 
 from .agents import Agent
 from .game import UNKNOWN, PublicState, neighbour_sum, neighbours, window_sum
-from .fastsolve import FastAnalysis
+from .fastsolve import FastAnalysis, expert_scores_native
 
 EPS = 1e-9
 
@@ -36,7 +36,7 @@ class ExpertAgent(Agent):
     def __init__(self, rng: np.random.Generator | None = None, *, samples: int = 48,
                  alpha: float = 1.0, cap: float = 0.9, bomb_reserve: float = 1.5,
                  interior_candidates: int = 12, bomb_candidates: int = 4,
-                 analysis=FastAnalysis):
+                 analysis=FastAnalysis, native: bool = True):
         self.rng = rng or np.random.default_rng()
         self.samples = samples
         self.alpha = alpha
@@ -45,6 +45,7 @@ class ExpertAgent(Agent):
         self.interior_candidates = interior_candidates
         self.bomb_candidates = bomb_candidates
         self.analysis = analysis
+        self.native = native
         self._cache: dict[bytes, tuple[int, float]] = {}
 
     # ----------------------------------------------------------- evaluation
@@ -92,7 +93,6 @@ class ExpertAgent(Agent):
         board = pub.board
         unknown = board == UNKNOWN
         layouts = analysis.sample_many(self.samples, self.rng)
-        counts = neighbour_sum(layouts.reshape(-1, cfg.h, cfg.w).astype(np.int8)).reshape(len(layouts), -1)
         me = pub.to_move
         frontier = np.zeros(cfg.n, dtype=bool)
         opened = (board >= 0) & (board <= 8)
@@ -104,6 +104,24 @@ class ExpertAgent(Agent):
         if len(interior) > self.interior_candidates:
             interior = self.rng.choice(interior, self.interior_candidates, replace=False)
         cand += list(interior)
+
+        if self.native and self.analysis is FastAnalysis and len(layouts):
+            centres = np.array([], dtype=np.int64)
+            expected = np.zeros(cfg.n)
+            if pub.bombs[me]:
+                legal_bomb = pub.legal_mask()[cfg.n:]
+                expected = window_sum(np.where(unknown, probs, 0.0).reshape(cfg.h, cfg.w)).reshape(-1)
+                expected = np.where(legal_bomb, expected, -1.0)
+                order = np.argsort(-expected)[: self.bomb_candidates]
+                centres = order[expected[order] > 0]
+            actions, values = expert_scores_native(
+                pub, layouts, probs, cand, centres, expected[centres],
+                alpha=self.alpha, cap=self.cap, bomb_reserve=self.bomb_reserve,
+                rng=self.rng,
+            )
+            return actions, values, probs
+
+        counts = neighbour_sum(layouts.reshape(-1, cfg.h, cfg.w).astype(np.int8)).reshape(len(layouts), -1)
 
         actions, values = [], []
         for c in cand:

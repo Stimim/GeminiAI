@@ -10,13 +10,14 @@ typedef struct {
     size_t count, capacity;
     double *hits;
     unsigned char *layouts;
+    double logcount;
 } Stats;
 typedef struct {
     int m, nc, *cells, *need, *left, *sum, *degree, *inc;
     unsigned char *assignment;
     Stats *stats;
     size_t nodes, limit;
-    int overflow, failed, remaining;
+    int overflow, failed, remaining, probabilities_only, borrowed_stats;
     uint64_t *rng;
     double density;
 } Component;
@@ -27,6 +28,34 @@ typedef struct {
     Component *components;
     double *suffix;
 } Solver;
+
+/* Exact component enumerations recur across hypothetical reveals. Retain only
+ * sufficient statistics, never randomized fallback results. */
+typedef struct ComponentMemo {
+    struct ComponentMemo *next;
+    uint64_t hash;
+    size_t length;
+    int *key, m;
+    Stats *stats;
+} ComponentMemo;
+
+static int *component_key(Component *c, size_t *length, uint64_t *hash) {
+    size_t size=3+(size_t)c->nc*2+c->m;
+    for (int i=0;i<c->m;++i) size+=c->degree[i];
+    int *key=malloc(size*sizeof(int));
+    if (!key) return NULL;
+    size_t p=0;
+    key[p++]=c->m; key[p++]=c->nc; key[p++]=c->remaining;
+    for (int q=0;q<c->nc;++q) { key[p++]=c->need[q]; key[p++]=c->left[q]; }
+    for (int i=0;i<c->m;++i) {
+        key[p++]=c->degree[i];
+        for (int j=0;j<c->degree[i];++j) key[p++]=c->inc[i*8+j];
+    }
+    *hash=1469598103934665603ULL;
+    for (size_t i=0;i<size;++i) { *hash^=(uint32_t)key[i]; *hash*=1099511628211ULL; }
+    *length=size;
+    return key;
+}
 static uint64_t next_random(uint64_t *s) {
     uint64_t z = (*s += UINT64_C(0x9e3779b97f4a7c15));
     z = (z ^ (z >> 30)) * UINT64_C(0xbf58476d1ce4e5b9);
@@ -57,7 +86,8 @@ void fs_free(void *ptr) {
     if (!s) return;
     for (int j=0; j<s->nc; ++j) {
         Component *c = s->components+j;
-        clear_stats(c); free(c->stats); free(c->cells); free(c->need);
+        if (!c->borrowed_stats) { clear_stats(c); free(c->stats); }
+        free(c->cells); free(c->need);
         free(c->left); free(c->sum); free(c->degree); free(c->inc); free(c->assignment);
     }
     free(s->components); free(s->claimed); free(s->interior); free(s->suffix); free(s);
@@ -68,14 +98,15 @@ static void record(Component *c, int k) {
         st->hits = calloc((size_t)c->m, sizeof(double));
         if (!st->hits) { c->failed=1; return; }
     }
-    if (st->count == st->capacity) {
+    if (!c->probabilities_only && st->count == st->capacity) {
         size_t cap = st->capacity ? st->capacity*2 : 8;
         if (cap > SIZE_MAX/(size_t)c->m) { c->failed=1; return; }
         void *p = realloc(st->layouts, cap*(size_t)c->m);
         if (!p) { c->failed=1; return; }
         st->layouts=p; st->capacity=cap;
     }
-    memcpy(st->layouts+st->count*(size_t)c->m, c->assignment, (size_t)c->m);
+    if (!c->probabilities_only)
+        memcpy(st->layouts+st->count*(size_t)c->m, c->assignment, (size_t)c->m);
     st->count++;
     for (int i=0; i<c->m; ++i) st->hits[i] += c->assignment[i];
 }
@@ -106,8 +137,9 @@ static int root(int *parent, int x) {
     return x;
 }
 
-void *fs_create(int h, int w, int mines, int remaining, const int8_t *board,
-                size_t limit, uint64_t seed, double *probs, int *exact, char *error) {
+static void *fs_create_impl(int h, int w, int mines, int remaining, const int8_t *board,
+                size_t limit, uint64_t seed, double *probs, int *exact, char *error,
+                int probabilities_only, ComponentMemo **memo, const double *logfactorial) {
     Solver *s=NULL;
     int *parent=NULL, *cons=NULL, *sizes=NULL, *needs=NULL, *which=NULL, *queue=NULL, *pos=NULL;
     unsigned char *adj=NULL, *seen=NULL;
@@ -172,14 +204,22 @@ void *fs_create(int h, int w, int mines, int remaining, const int8_t *board,
         if (!c->cells || !c->need || !c->left || !c->sum || !c->degree || !c->inc || !c->assignment || !c->stats) goto fail;
         int start=-1, best=INT_MAX;
         for (int a=0;a<n;++a) if (board[a]==-1 && adj[(size_t)a*n+a] && which[root(parent,a)]==j) {
-            int degree=0; for (int b=0;b<n;++b) degree+=adj[(size_t)a*n+b];
+            int degree=0, row=a/w, col=a%w;
+            /* Shared-clue variables are at most two rows/columns apart. */
+            for (int rr=row-2;rr<=row+2;++rr) for (int cc=col-2;cc<=col+2;++cc)
+                if (rr>=0 && rr<h && cc>=0 && cc<w) degree+=adj[(size_t)a*n+rr*w+cc];
             if (degree<best) { best=degree; start=a; }
         }
         int front=0, back=0;
         queue[back++]=start; seen[start]=1;
         while (front<back) {
             int a=queue[front]; c->cells[front]=a; pos[a]=front; front++;
-            for (int b=0;b<n;++b) if (adj[(size_t)a*n+b] && !seen[b]) { seen[b]=1; queue[back++]=b; }
+            int row=a/w, col=a%w;
+            for (int rr=row-2;rr<=row+2;++rr) for (int cc=col-2;cc<=col+2;++cc) {
+                if (rr<0 || rr>=h || cc<0 || cc>=w) continue;
+                int b=rr*w+cc;
+                if (adj[(size_t)a*n+b] && !seen[b]) { seen[b]=1; queue[back++]=b; }
+            }
         }
         int cq=0;
         for (int q=0;q<nq;++q) if (which[root(parent,cons[q*8])]==j) {
@@ -190,30 +230,55 @@ void *fs_create(int h, int w, int mines, int remaining, const int8_t *board,
             cq++;
         }
         c->remaining=remaining; c->rng=&seed; c->density=(double)remaining/(unknown ? unknown:1); c->limit=limit;
-        dfs(c,0,0,0);
-        if (c->failed) goto fail;
-        if (c->overflow) {
-            *exact=0; clear_stats(c);
-            c->limit=limit>10000 ? limit:10000;
-            for (int attempt=0;attempt<48;++attempt) {
-                c->nodes=0; c->overflow=0; dfs(c,0,0,1);
-                if (c->failed) goto fail;
+        c->probabilities_only=probabilities_only;
+        size_t key_length=0;
+        uint64_t key_hash=0;
+        int *key=memo ? component_key(c,&key_length,&key_hash):NULL;
+        if (memo && !key) goto fail;
+        ComponentMemo *hit=memo ? memo[key_hash&4095]:NULL;
+        while (hit && (hit->hash!=key_hash || hit->length!=key_length ||
+                       memcmp(hit->key,key,key_length*sizeof(int)))) hit=hit->next;
+        if (hit) {
+            free(c->stats); c->stats=hit->stats; c->borrowed_stats=1;
+            free(key);
+        } else {
+            dfs(c,0,0,0);
+            if (c->failed) { free(key); goto fail; }
+            if (c->overflow) {
+                free(key); key=NULL;
+                *exact=0; clear_stats(c);
+                c->limit=limit>10000 ? limit:10000;
+                for (int attempt=0;attempt<48;++attempt) {
+                    c->nodes=0; c->overflow=0; dfs(c,0,0,1);
+                    if (c->failed) goto fail;
+                }
+            }
+            if (key) {
+                ComponentMemo *entry=malloc(sizeof(ComponentMemo));
+                if (!entry) { free(key); goto fail; }
+                *entry=(ComponentMemo){memo[key_hash&4095],key_hash,key_length,key,c->m,c->stats};
+                memo[key_hash&4095]=entry; c->borrowed_stats=1;
             }
         }
         size_t count=0; for (int k=0;k<=c->m;++k) count+=c->stats[k].count;
         if (!count) { message="could not find a consistent component layout"; goto fail; }
+        for (int k=0;k<=c->m;++k) if (c->stats[k].count)
+            c->stats[k].logcount=log((double)c->stats[k].count);
         c->rng=NULL;
     }
     size_t stride=(size_t)remaining+1;
     s->suffix=malloc(((size_t)s->nc+1)*stride*sizeof(double));
     if (!s->suffix) goto fail;
-    for (int r=0;r<=remaining;++r) s->suffix[(size_t)s->nc*stride+r]=r<=s->ni ? lgamma(s->ni+1.)-lgamma(r+1.)-lgamma(s->ni-r+1.) : -INFINITY;
+    for (int r=0;r<=remaining;++r)
+        s->suffix[(size_t)s->nc*stride+r]=r>s->ni ? -INFINITY :
+            logfactorial ? logfactorial[s->ni]-logfactorial[r]-logfactorial[s->ni-r] :
+            lgamma(s->ni+1.)-lgamma(r+1.)-lgamma(s->ni-r+1.);
     for (int j=s->nc-1;j>=0;--j) {
         Component *c=s->components+j;
         for (int r=0;r<=remaining;++r) {
             double v=-INFINITY;
             for (int k=0;k<=c->m && k<=r;++k) if (c->stats[k].count)
-                v=addlog(v,log((double)c->stats[k].count)+s->suffix[(size_t)(j+1)*stride+r-k]);
+                v=addlog(v,c->stats[k].logcount+s->suffix[(size_t)(j+1)*stride+r-k]);
             s->suffix[(size_t)j*stride+r]=v;
         }
     }
@@ -227,7 +292,7 @@ void *fs_create(int h, int w, int mines, int remaining, const int8_t *board,
         Component *c=s->components+j;
         for (int p=0;p<=remaining;++p) next[p]=-INFINITY;
         for (int k=0;k<=c->m && k<=remaining;++k) if (c->stats[k].count) {
-            double countlog=log((double)c->stats[k].count), weight=-INFINITY;
+            double countlog=c->stats[k].logcount, weight=-INFINITY;
             for (int p=0;p+k<=remaining;++p) if (isfinite(forward[p])) {
                 next[p+k]=addlog(next[p+k],forward[p]+countlog);
                 weight=addlog(weight,forward[p]+s->suffix[(size_t)(j+1)*stride+remaining-p-k]);
@@ -248,6 +313,11 @@ fail:
     snprintf(error,256,"%s",message);
     free(parent); free(cons); free(sizes); free(needs); free(which); free(queue); free(pos); free(seen); free(adj);
     fs_free(s); return NULL;
+}
+
+void *fs_create(int h, int w, int mines, int remaining, const int8_t *board,
+                size_t limit, uint64_t seed, double *probs, int *exact, char *error) {
+    return fs_create_impl(h,w,mines,remaining,board,limit,seed,probs,exact,error,0,NULL,NULL);
 }
 
 int fs_sample_many(void *ptr, size_t count, uint64_t seed, unsigned char *out) {
@@ -283,4 +353,197 @@ int fs_sample_many(void *ptr, size_t count, uint64_t seed, unsigned char *out) {
         }
     }
     free(pool); return 1;
+}
+
+/* Decision-local memoization also preserves Python's first-seen outcome order.
+ * Seeds are supplied by NumPy, one per cache miss, including exact analyses. */
+typedef struct {
+    uint64_t hash;
+    int8_t *board;
+    int score0, score1;
+    double advantage;
+} ExpertEntry;
+typedef struct {
+    int h, w, n, mines;
+    size_t capacity, used;
+    ExpertEntry *entries;
+    const uint64_t *seeds;
+    double *probs, alpha, cap;
+    char *error;
+    ComponentMemo **memo;
+    double *logfactorial;
+} ExpertCache;
+
+static uint64_t expert_hash(const int8_t *board, int n, int a, int b) {
+    uint64_t hash=1469598103934665603ULL;
+    for (int i=0;i<n;++i) { hash^=(unsigned char)board[i]; hash*=1099511628211ULL; }
+    hash^=(uint64_t)a; hash*=1099511628211ULL; hash^=(uint64_t)b;
+    return hash;
+}
+
+static double expert_guess(double p, double cap) {
+    if (p>cap) p=cap;
+    return p/(1-p);
+}
+
+static int expert_advantage(ExpertCache *cache, const int8_t *board,
+                            int a, int b, double *value) {
+    uint64_t hash=expert_hash(board,cache->n,a,b);
+    size_t slot=hash&(cache->capacity-1);
+    while (cache->entries[slot].board) {
+        ExpertEntry *entry=cache->entries+slot;
+        if (entry->hash==hash && entry->score0==a && entry->score1==b &&
+            !memcmp(entry->board,board,(size_t)cache->n)) {
+            *value=entry->advantage; return 1;
+        }
+        slot=(slot+1)&(cache->capacity-1);
+    }
+    int exact;
+    void *solver=fs_create_impl(cache->h,cache->w,cache->mines,cache->mines-a-b,
+                           board,50000,cache->seeds[cache->used],cache->probs,
+                           &exact,cache->error,1,cache->memo,cache->logfactorial);
+    if (!solver) return 0;
+    fs_free(solver);
+    int sure=0;
+    double best=0;
+    for (int i=0;i<cache->n;++i) if (board[i]==-1) {
+        if (cache->probs[i]>=1-1e-9) sure++;
+        else if (cache->probs[i]>best) best=cache->probs[i];
+    }
+    /* An empty remainder contributes zero, even for an unusual negative cap. */
+    int rest=0;
+    for (int i=0;i<cache->n;++i)
+        if (board[i]==-1 && cache->probs[i]<1-1e-9) { rest=1; break; }
+    *value=sure+(rest ? cache->alpha*expert_guess(best,cache->cap):0);
+    int8_t *copy=malloc((size_t)cache->n);
+    if (!copy) { snprintf(cache->error,256,"out of memory"); return 0; }
+    memcpy(copy,board,(size_t)cache->n);
+    cache->entries[slot]=(ExpertEntry){hash,copy,a,b,*value};
+    cache->used++;
+    return 1;
+}
+
+static void expert_reveal(int8_t *board, const unsigned char *counts,
+                          const int *cells, int length, const int *nb,
+                          const int *degree, int *stack) {
+    int top=0;
+    for (int i=0;i<length;++i) {
+        int c=cells[i];
+        if (board[c]==-1) {
+            board[c]=(int8_t)counts[c];
+            if (!counts[c]) stack[top++]=c;
+        }
+    }
+    while (top) {
+        int c=stack[--top];
+        for (int j=0;j<degree[c];++j) {
+            int x=nb[c*8+j];
+            if (board[x]==-1) {
+                board[x]=(int8_t)counts[x];
+                if (!counts[x]) stack[top++]=x;
+            }
+        }
+    }
+}
+
+/* Bomb centres and their expected gains use NumPy's ordering in the caller. */
+int fs_expert_scores(int h, int w, int mines, const int8_t *board,
+                     const int *scores, int me, const unsigned char *layouts,
+                     size_t samples, const double *probs, const int *candidates,
+                     size_t nc, const int *bombs, const double *expected, size_t nbombs,
+                     double alpha, double cap, double reserve, const uint64_t *seeds,
+                     int *actions, double *values, size_t *nout, size_t *used,
+                     char *error) {
+    int n=h*w, ok=0;
+    size_t maximum=(nc+nbombs)*samples, capacity=8;
+    while (capacity/2<maximum) {
+        if (capacity>SIZE_MAX/2) { snprintf(error,256,"workspace too large"); return 0; }
+        capacity*=2;
+    }
+    ComponentMemo *memo[4096]={0};
+    ExpertCache cache={h,w,n,mines,capacity,0,NULL,seeds,NULL,alpha,cap,error,memo,NULL};
+    cache.entries=calloc(capacity,sizeof(ExpertEntry));
+    cache.probs=malloc((size_t)n*sizeof(double));
+    cache.logfactorial=malloc(((size_t)n+1)*sizeof(double));
+    int *nb=malloc((size_t)n*8*sizeof(int)), *degree=calloc((size_t)n,sizeof(int));
+    int *stack=malloc((size_t)n*sizeof(int));
+    unsigned char *counts=calloc(samples,(size_t)n);
+    int8_t *outcomes=malloc((samples ? samples:1)*(size_t)n);
+    size_t *weights=malloc((samples ? samples:1)*sizeof(size_t));
+    int8_t *current=malloc((size_t)n);
+    if (!cache.entries || !cache.probs || !cache.logfactorial || !nb || !degree || !stack ||
+        !counts || !outcomes || !weights || !current) {
+        snprintf(error,256,"out of memory"); goto done;
+    }
+    for (int i=0;i<=n;++i) cache.logfactorial[i]=lgamma(i+1.);
+    for (int c=0;c<n;++c) {
+        int r=c/w, col=c%w;
+        for (int dr=-1;dr<=1;++dr) for (int dc=-1;dc<=1;++dc) {
+            int rr=r+dr, cc=col+dc;
+            if ((!dr && !dc) || rr<0 || rr>=h || cc<0 || cc>=w) continue;
+            nb[c*8+degree[c]++]=rr*w+cc;
+        }
+        for (size_t s=0;s<samples;++s)
+            for (int j=0;j<degree[c];++j)
+                counts[s*n+c]+=layouts[s*n+nb[c*8+j]];
+    }
+    *nout=0;
+    for (size_t i=0;i<nc;++i) {
+        int c=candidates[i];
+        size_t distinct=0, safe=0;
+        for (size_t s=0;s<samples;++s) if (!layouts[s*n+c]) {
+            memcpy(current,board,(size_t)n);
+            expert_reveal(current,counts+s*n,&c,1,nb,degree,stack);
+            size_t j=0;
+            for (;j<distinct;++j)
+                if (!memcmp(outcomes+j*n,current,(size_t)n)) break;
+            if (j==distinct) {
+                memcpy(outcomes+j*n,current,(size_t)n); weights[j]=0; distinct++;
+            }
+            weights[j]++; safe++;
+        }
+        if (!safe) continue;
+        double advantage=0;
+        for (size_t j=0;j<distinct;++j) {
+            double value;
+            if (!expert_advantage(&cache,outcomes+j*n,scores[0],scores[1],&value)) goto done;
+            advantage+=weights[j]*value;
+        }
+        actions[*nout]=c;
+        values[(*nout)++]=expert_guess(probs[c],cap)-advantage/safe;
+    }
+    for (size_t i=0;i<nbombs;++i) {
+        int centre=bombs[i], cells[25], length=0;
+        int r=centre/w, col=centre%w;
+        for (int rr=r-2;rr<=r+2;++rr) for (int cc=col-2;cc<=col+2;++cc)
+            if (rr>=0 && rr<h && cc>=0 && cc<w) cells[length++]=rr*w+cc;
+        double advantage=0;
+        for (size_t s=0;s<samples;++s) {
+            int sc[2]={scores[0],scores[1]};
+            memcpy(current,board,(size_t)n);
+            for (int j=0;j<length;++j) {
+                int c=cells[j];
+                if (current[c]==-1 && layouts[s*n+c]) { current[c]=9+me; sc[me]++; }
+            }
+            expert_reveal(current,counts+s*n,cells,length,nb,degree,stack);
+            double value;
+            if (!expert_advantage(&cache,current,sc[0],sc[1],&value)) goto done;
+            advantage+=value;
+        }
+        actions[*nout]=n+centre;
+        values[(*nout)++]=expected[i]-advantage/samples-reserve;
+    }
+    ok=1;
+done:
+    *used=cache.used;
+    if (cache.entries) for (size_t i=0;i<capacity;++i) free(cache.entries[i].board);
+    free(cache.entries); free(cache.probs); free(nb); free(degree); free(stack);
+    free(counts); free(outcomes); free(weights); free(current);
+    free(cache.logfactorial);
+    for (int i=0;i<4096;++i) while (memo[i]) {
+        ComponentMemo *entry=memo[i]; memo[i]=entry->next;
+        for (int k=0;k<=entry->m;++k) { free(entry->stats[k].hits); free(entry->stats[k].layouts); }
+        free(entry->stats); free(entry->key); free(entry);
+    }
+    return ok;
 }
