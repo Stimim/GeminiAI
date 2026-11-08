@@ -1,10 +1,15 @@
 import json
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
 import torch
 
 from msflags import registry
+from msflags.agents import NetAgent
+from msflags.deep import DeepConfig, DeepEvaluator, DeepNet, save_net
+from msflags.game import Config, Game
+from msflags.rollout import RolloutAgent
 from msflags.expert import ExpertAgent, Expert2Agent
 from msflags.model import Net, NetConfig, save
 
@@ -22,6 +27,9 @@ def pins(tmp_path, monkeypatch):
         spec['generations'] = []
     path = tmp_path / 'generations.json'
     monkeypatch.setattr(registry, 'GENERATIONS_PATH', path)
+    deep_path = tmp_path / 'deep_generations.json'
+    deep_path.write_text('[]')
+    monkeypatch.setattr(registry, 'DEEP_GENERATIONS_PATH', deep_path)
 
     def install(architecture, checkpoint_path, bootstrap=8000, selfplay=0):
         data[architecture]['generations'].append(dict(
@@ -74,7 +82,7 @@ def test_metrics_after_timestamp_do_not_change_identity(tmp_path):
     assert registry.training_counts(path, dict(stage='bootstrap')) == (8000, 0)
 
 
-def test_eight_categories_share_pins_and_keep_missing_identity(tmp_path, pins):
+def test_ten_categories_share_pins_and_keep_missing_identity(tmp_path, pins):
     bootstrap = tmp_path / 'arbitrary-name.pt'
     bootstrap.touch()
     missing = tmp_path / 'not-installed.pt'
@@ -83,7 +91,8 @@ def test_eight_categories_share_pins_and_keep_missing_identity(tmp_path, pins):
     categories = registry.catalog()
     assert [e['id'] for e in categories] == [
         'r64x4.greedy', 'r64x4.mcts100-c1.5', 'r32x3.greedy',
-        'r32x3.mcts100-c1.5', 'random', 'solver', 'expert', 'expert2',
+        'r32x3.mcts100-c1.5', 'p96x8.greedy', 'p96x8.rollout2x128',
+        'random', 'solver', 'expert', 'expert2',
     ]
     for category in categories[:2]:
         assert [e['generation'] for e in category['generations']] == [0, 10]
@@ -213,7 +222,7 @@ def test_promote_rejects_latest_and_incompatible_weights(tmp_path, pins):
 
 def test_cli_list_and_promote_error(pins, capsys):
     registry.main(['list'])
-    assert len(json.loads(capsys.readouterr().out)) == 8
+    assert len(json.loads(capsys.readouterr().out)) == 10
     with pytest.raises(SystemExit) as error:
         registry.main(['promote', 'latest.pt'])
     assert error.value.code == 2
@@ -249,3 +258,113 @@ def test_promote_rejects_load_compatible_unsupported_architecture(tmp_path, pins
     with pytest.raises(ValueError, match='Unsupported architecture'):
         registry.promote(path)
     assert registry.GENERATIONS_PATH.read_bytes() == before
+
+
+@pytest.fixture
+def deep_pin(tmp_path, pins, monkeypatch):
+    monkeypatch.setattr(registry, '_device', 'cpu')
+    monkeypatch.setattr(registry, '_evaluators', {})
+    path = tmp_path / 'deep.pt'
+    save_net(DeepNet(DeepConfig(channels=4, blocks=1)), path)
+    records = [dict(id='p96x8-n1', checkpoint=str(path), description='Tiny test policy'),
+               dict(id='p96x8-n2', checkpoint=str(tmp_path / 'missing.pt'), description='Missing policy')]
+    registry.DEEP_GENERATIONS_PATH.write_text(json.dumps(records))
+    return path
+
+
+def test_deep_categories_preserve_missing_pins_and_detail(deep_pin):
+    for suffix in ('greedy', 'rollout2x128'):
+        category = f'p96x8.{suffix}'
+        assert registry.resolve(category) == f'p96x8-n1.{suffix}'
+        assert registry.resolve(f'p96x8-n2.{suffix}') == f'p96x8-n2.{suffix}'
+        assert not registry.available(f'p96x8-n2.{suffix}')
+        assert registry.detail(f'p96x8-n2.{suffix}')['shape'] == dict(channels=96, blocks=8)
+        with pytest.raises(ValueError, match='unavailable agent'):
+            registry.create(f'p96x8-n2.{suffix}')
+    assert str(deep_pin) in registry.pinned_checkpoints()
+    assert str(deep_pin.parent / 'missing.pt') in registry.pinned_checkpoints()
+    detail = registry.detail('p96x8.greedy')
+    assert detail['shape'] == dict(channels=4, blocks=1)
+    assert detail['input_planes'] > 20
+    assert detail['parameters'] > 0
+    assert detail['provenance']['description'] == 'Tiny test policy'
+    assert 'probabilities' in detail['explanation']
+
+
+def test_create_deep_agents_share_cpu_evaluator_and_fixed_settings(deep_pin):
+    rng = np.random.default_rng(42)
+    greedy = registry.create('p96x8.greedy', sims=7, rng=rng)
+    search = registry.create('p96x8.rollout2x128', sims=7, rng=rng)
+    assert type(greedy) is NetAgent
+    assert type(search) is RolloutAgent
+    assert isinstance(greedy.ev, DeepEvaluator)
+    assert search.ev is greedy.ev
+    assert greedy.ev.device == torch.device('cpu')
+    assert search.rng is rng
+    assert (search.turns, search.rollouts) == (2, 128)
+    # The Play path uses act(), while offline arena batches the same evaluator.
+    game = Game.random(Config(2, 3, 3), rng)
+    assert game.legal_mask()[greedy.act(game.public())]
+    assert game.legal_mask()[search.act(game.public())]
+
+
+def test_deep_greedy_two_game_arena_match(tmp_path, deep_pin):
+    from msflags.arena import ArenaManager
+
+    manager = ArenaManager(tmp_path / 'games.jsonl', cfg=Config(2, 3, 3))
+    manager.batch_size = 2
+    match = manager.start('p96x8.greedy', 'solver', 2, seed=7)
+    manager._thread.join(timeout=15)
+    assert not manager._thread.is_alive()
+    result = manager.status(match['id'])
+    assert result['status'] == 'completed', result['error']
+    assert result['completed'] == 2
+    records = [json.loads(line) for line in manager.path.read_text().splitlines()]
+    assert records == result['results']
+    assert [record['seats'] for record in records] == [
+        ['p96x8-n1.greedy', 'solver'], ['solver', 'p96x8-n1.greedy']]
+    rows = {row['id']: row for row in manager.ratings()['ratings']}
+    assert rows['p96x8-n1.greedy']['games'] == 2
+
+
+def test_promote_deep_cli_appends_shared_pin(tmp_path, pins, monkeypatch, capsys):
+    path = tmp_path / 'net-2.pt'
+    path.touch()
+    calls = []
+
+    def load(path, device):
+        calls.append((path, device))
+        return SimpleNamespace(cfg=DeepConfig())
+
+    monkeypatch.setattr(registry, 'load_net', load)
+    registry.main(['promote-deep', str(path), '--id', 'n2', '--description', 'New expert policy'])
+    promoted = json.loads(capsys.readouterr().out)
+    assert calls == [(str(path), 'cpu')]
+    assert [entry['id'] for entry in promoted] == ['p96x8-n2.greedy', 'p96x8-n2.rollout2x128']
+    assert registry._deep_generations() == [
+        dict(id='p96x8-n2', checkpoint=str(path), description='New expert policy')]
+    assert registry.resolve('p96x8.greedy') == 'p96x8-n2.greedy'
+    before = registry.DEEP_GENERATIONS_PATH.read_bytes()
+    with pytest.raises(ValueError, match='Duplicate deep generation id'):
+        registry.promote_deep(tmp_path / 'other.pt', 'n2', 'Duplicate')
+    with pytest.raises(ValueError, match='Duplicate checkpoint path'):
+        registry.promote_deep(path, 'n3', 'Duplicate')
+    assert registry.DEEP_GENERATIONS_PATH.read_bytes() == before
+
+
+def test_promote_deep_rejects_invalid_pins(tmp_path, pins):
+    before = registry.DEEP_GENERATIONS_PATH.read_bytes()
+    with pytest.raises(ValueError, match='latest.pt is mutable'):
+        registry.promote_deep(tmp_path / 'latest.pt', 'n2', 'Mutable')
+    with pytest.raises(ValueError, match='Deep id'):
+        registry.promote_deep(tmp_path / 'net.pt', 'bad', 'Invalid')
+    with pytest.raises(ValueError, match='description'):
+        registry.promote_deep(tmp_path / 'net.pt', 'n2', ' ')
+    path = tmp_path / 'tiny.pt'
+    save_net(DeepNet(DeepConfig(channels=4, blocks=1)), path)
+    with pytest.raises(ValueError, match='Unsupported deep architecture'):
+        registry.promote_deep(path, 'n2', 'Wrong shape')
+    torch.save(dict(deep_cfg=dict(channels=96, blocks=8), state={}), path)
+    with pytest.raises(RuntimeError):
+        registry.promote_deep(path, 'n2', 'Invalid weights')
+    assert registry.DEEP_GENERATIONS_PATH.read_bytes() == before

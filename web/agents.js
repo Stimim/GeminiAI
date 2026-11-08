@@ -131,7 +131,7 @@ function generationsSection(category) {
       arena.href = `/arena.html?a=${encodeURIComponent(generation.id)}`;
       links.append(arena);
     }
-    row.append(title, element('td', '', AgentCatalog.training(generation.training)), element('td', 'rating-value', AgentCatalog.elo(generation)), element('td', 'numeric', generation.games ?? 0), links);
+    row.append(title, element('td', '', generation.description || AgentCatalog.training(generation.training)), element('td', 'rating-value', AgentCatalog.elo(generation)), element('td', 'numeric', generation.games ?? 0), links);
     body.append(row);
   }
   table.append(head, body); scroll.append(table); section.append(scroll);

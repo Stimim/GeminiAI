@@ -1,7 +1,7 @@
 'use strict';
 
 window.AgentCatalog = (() => {
-  const neural = category => category && ['net', 'mcts'].includes(category.kind);
+  const neural = category => category && ['net', 'mcts', 'deep', 'rollout'].includes(category.kind);
   const generations = category => [...(category?.generations || [])].sort((a, b) => Number(b.generation ?? 0) - Number(a.generation ?? 0) || Number(b.training?.bootstrap ?? 0) - Number(a.training?.bootstrap ?? 0) || b.id.localeCompare(a.id));
   const categoryFor = (categories, id) => categories.find(category => category.id === id || category.generations.some(generation => generation.id === id));
   const resolve = (category, value) => value || category?.default_generation || '';
@@ -31,7 +31,8 @@ window.AgentCatalog = (() => {
   }
   const elo = entry => entry?.games !== 0 && Number.isFinite(entry?.elo ?? entry?.rating) && Number.isFinite(entry?.uncertainty) ? `${Math.round(entry.elo ?? entry.rating)} ± ${Math.round(entry.uncertainty)}` : 'Unrated';
   function training(training) {
-    if (!training || (training.bootstrap === 0 && training.selfplay === 0)) return 'No training (baseline)';
+    if (!training) return 'Training history not recorded';
+    if (training.bootstrap === 0 && training.selfplay === 0) return 'No training (baseline)';
     const parts = [];
     for (const [stage, label] of [['bootstrap', 'Bootstrap'], ['selfplay', 'Self-play']]) {
       const value = training[stage];

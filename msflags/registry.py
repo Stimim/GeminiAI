@@ -1,15 +1,13 @@
-"""Eight categories backed by immutable, shared architecture generation pins.
+"""Immutable agent catalog backed by shared ResNet and deep checkpoint pins.
 
-generations.json retains checkpoint-derived training counts even without weights.
-Each generation is one JSON line; never repoint an existing record. Bootstrap,
-every tenth completed self-play iteration, and the newest completed timestamped
-checkpoint are initially pinned. ``python -m msflags.registry promote PATH``
-validates and appends a pin; ``python -m msflags.registry list`` lists the catalog.
+Missing weights retain their identities. ``python -m msflags.registry list``
+lists the catalog; ``promote`` and ``promote-deep`` append validated pins.
 """
 from __future__ import annotations
 
 import json
 from pathlib import Path
+import re
 import threading
 
 import numpy as np
@@ -19,6 +17,8 @@ from .agents import MCTSAgent, NetAgent, RandomAgent, SolverAgent
 from .expert import ExpertAgent, Expert2Agent
 from .game import Config, NUM_PLANES
 from .model import Evaluator, load
+from .deep import DeepEvaluator, PLANES as DEEP_PLANES, load_net
+from .rollout import RolloutAgent
 
 _device = 'cpu'
 _lock = threading.RLock()
@@ -33,6 +33,7 @@ def configure(device='cpu'):
 
 
 GENERATIONS_PATH = Path(__file__).with_name('generations.json')
+DEEP_GENERATIONS_PATH = Path(__file__).with_name('deep_generations.json')
 _SEARCH = dict(sims=100, c_puct=1.5, fpu_reduction=0.2)
 CATEGORIES = [
     dict(id='r64x4.greedy', name='ResNet 64×4 · Greedy policy', kind='net', architecture='r64x4', settings={},
@@ -43,6 +44,11 @@ CATEGORIES = [
          summary='Solver-distilled policy, without tree search.'),
     dict(id='r32x3.mcts100-c1.5', name='ResNet 32×3 · MCTS-100 (c 1.5)', kind='mcts', architecture='r32x3', settings=_SEARCH,
          summary='Information-set search with 100 simulations and exploration c 1.5.'),
+    dict(id='p96x8.greedy', name='Probability ResNet 96×8 · Greedy policy', kind='deep', architecture='p96x8', settings={},
+         summary='Probability-aware expert-distilled policy, without search.'),
+    dict(id='p96x8.rollout2x128', name='Probability ResNet 96×8 · Rollout 2×128', kind='rollout', architecture='p96x8',
+         settings=dict(turns=2, rollouts=128),
+         summary='Probability-aware policy with 128 sampled rollouts truncated after two changes of turn.'),
     dict(id='random', name='Random', kind='random', settings={},
          summary='Uniformly chooses a legal action.',
          explanation='Chooses uniformly among legal open and bomb actions. It never reads clues or scores. This is a deliberately weak baseline, not the rating anchor.'),
@@ -61,6 +67,22 @@ _identities: dict[tuple[str, int], tuple[dict, dict]] = {}
 
 def _generations():
     return json.loads(GENERATIONS_PATH.read_text())
+
+
+def _deep_generations():
+    return json.loads(DEEP_GENERATIONS_PATH.read_text())
+
+
+def _deep_entry(record, category, generation):
+    path = Path(record['checkpoint'])
+    return dict(id=f"{record['id']}.{category['id'].split('.', 1)[1]}",
+                category_id=category['id'], generation=generation,
+                label=record['id'], description=record['description'],
+                name=f"{category['name']} · {record['description']}",
+                kind=category['kind'], architecture='p96x8', checkpoint=str(path),
+                settings=dict(category['settings']), available=path.is_file(),
+                request_sims=False, summary=category['summary'],
+                shape=dict(channels=96, blocks=8))
 
 
 def training_counts(path, checkpoint):
@@ -143,6 +165,7 @@ def _neural_entry(checkpoint, search, *, shape=None, training=None):
 def entries():
     """Flat concrete identities; missing files never erase pinned generations."""
     data = _generations()
+    deep_records = _deep_generations()
     result = []
     paths = set()
     for architecture, spec in data.items():
@@ -154,8 +177,23 @@ def entries():
             if path in paths:
                 raise ValueError('Duplicate checkpoint path in registry')
             paths.add(path)
+    deep_ids = set()
+    for record in deep_records:
+        if not re.fullmatch(r'p96x8-n[1-9][0-9]*', record['id']):
+            raise ValueError(f"Invalid deep generation id: {record['id']}")
+        if record['id'] in deep_ids:
+            raise ValueError('Duplicate deep generation id in registry')
+        deep_ids.add(record['id'])
+        path = str(Path(record['checkpoint']).resolve())
+        if path in paths:
+            raise ValueError('Duplicate checkpoint path in registry')
+        paths.add(path)
     for category in CATEGORIES:
         architecture = category.get('architecture')
+        if architecture == 'p96x8':
+            result.extend(_deep_entry(record, category, generation)
+                          for generation, record in enumerate(deep_records, 1))
+            continue
         if architecture is None:
             result.append({**category, 'category_id': category['id'], 'generation': 0,
                            'label': category['name'], 'available': True,
@@ -216,7 +254,8 @@ def available(agent_id):
 
 def pinned_checkpoints() -> set[str]:
     """Paths protected from retention, including pins not installed locally."""
-    return {record['checkpoint'] for spec in _generations().values() for record in spec['generations']}
+    return ({record['checkpoint'] for spec in _generations().values() for record in spec['generations']}
+            | {record['checkpoint'] for record in _deep_generations()})
 
 
 def _provenance(path, checkpoint):
@@ -272,6 +311,16 @@ def _generation_detail(agent_id):
     path = Path(entry['checkpoint'])
     if not path.is_file():
         return {**result, 'provenance': {}, 'explanation': 'This checkpoint is not installed.'}
+    if entry.get('architecture') == 'p96x8':
+        ck = torch.load(path, map_location='cpu', weights_only=False)
+        parameters = {name: tensor.numel() for name, tensor in ck['state'].items()
+                      if not name.endswith(('.running_mean', '.running_var', '.num_batches_tracked'))}
+        return {**result, 'shape': ck['deep_cfg'], 'input_planes': DEEP_PLANES,
+                'parameters': sum(parameters.values()),
+                'provenance': {'description': entry['description']},
+                'explanation': 'The probability-aware residual network reads the public board and solver-derived mine probabilities. It predicts a joint open/bomb policy and a value, without reading hidden mines. ' +
+                ('Greedy play chooses the highest-policy legal action.' if entry['kind'] == 'deep' else
+                 'Search samples consistent mine layouts and compares candidate actions with 128 rollouts, truncated after two changes of turn.')}
     key = (str(path.resolve()), path.stat().st_mtime_ns)
     with _lock:
         if key not in _metadata:
@@ -312,6 +361,13 @@ def create(agent_id, sims=None, rng=None):
     if not path.is_file(): raise ValueError(f'unavailable agent: {agent_id}')
     key = (str(path.resolve()), _device)
     with _lock:
+        if entry.get('architecture') == 'p96x8':
+            if key not in _evaluators:
+                _evaluators[key] = DeepEvaluator(load_net(str(path), _device), _device)
+            evaluator = _evaluators[key]
+            if entry['kind'] == 'deep':
+                return NetAgent(evaluator)
+            return RolloutAgent(evaluator, rng, **entry['settings'])
         if key not in _evaluators:
             _evaluators[key] = Evaluator(load(str(path), _device)[0], _device)
         evaluator = _evaluators[key]
@@ -358,6 +414,31 @@ def promote(checkpoint):
             for search in (None, _SEARCH)]
 
 
+def promote_deep(checkpoint, generation_id, description):
+    """Append one immutable probability-aware 96×8 checkpoint pin."""
+    path = Path(checkpoint)
+    if path.name == 'latest.pt' or path.resolve().name == 'latest.pt':
+        raise ValueError('latest.pt is mutable; promote an immutable checkpoint')
+    if not re.fullmatch(r'n[1-9][0-9]*', generation_id):
+        raise ValueError('Deep id must be n followed by a positive integer')
+    if not description.strip():
+        raise ValueError('Deep description must not be empty')
+    records = _deep_generations()
+    identity = f'p96x8-{generation_id}'
+    if any(record['id'] == identity for record in records):
+        raise ValueError('Duplicate deep generation id in registry')
+    if str(path.resolve()) in {str(Path(p).resolve()) for p in pinned_checkpoints()}:
+        raise ValueError('Duplicate checkpoint path in registry')
+    net = load_net(str(path), 'cpu')
+    if (net.cfg.channels, net.cfg.blocks) != (96, 8):
+        raise ValueError('Unsupported deep architecture: expected 96×8')
+    record = dict(id=identity, checkpoint=str(path), description=description.strip())
+    records.append(record)
+    DEEP_GENERATIONS_PATH.write_text('[\n' + ',\n'.join('  ' + json.dumps(item) for item in records) + '\n]\n')
+    return [_deep_entry(record, category, len(records)) for category in CATEGORIES
+            if category.get('architecture') == 'p96x8']
+
+
 def main(argv=None):
     import argparse
 
@@ -366,12 +447,17 @@ def main(argv=None):
     commands.add_parser('list', help='List categories and every pinned generation.')
     promotion = commands.add_parser('promote', help='Append an immutable checkpoint to its architecture.')
     promotion.add_argument('checkpoint')
+    deep_promotion = commands.add_parser('promote-deep', help='Append an immutable probability-aware checkpoint.')
+    deep_promotion.add_argument('checkpoint')
+    deep_promotion.add_argument('--id', required=True)
+    deep_promotion.add_argument('--description', required=True)
     args = parser.parse_args(argv)
     if args.command == 'list':
         print(json.dumps(catalog(), indent=2))
     else:
         try:
-            promoted = promote(args.checkpoint)
+            promoted = (promote_deep(args.checkpoint, args.id, args.description)
+                        if args.command == 'promote-deep' else promote(args.checkpoint))
         except (ValueError, OSError, RuntimeError, KeyError, TypeError) as exc:
             parser.error(str(exc))
         print(json.dumps(promoted, indent=2))
