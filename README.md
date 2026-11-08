@@ -126,7 +126,7 @@ The reset archived **100** retired-agent games and retained **21** solver/random
 
 Run the server with `uv run python -m msflags.server` and open http://127.0.0.1:8000. Neural catalog entries use pinned timestamped checkpoints; random and solver need no weights. Use `--host`, `--port`, and `--device cpu|cuda` to configure it. The interface supports human-vs-AI, AI-vs-AI, and hot-seat games, with hints and move-by-move animation.
 
-The [Journal](http://127.0.0.1:8000/journal.html) tells the project's development story in nine educational chapters, with hash-linked article reading, static diagrams, and milestone Elo results. Articles live as repository-owned HTML fragments in `web/journal/`; the reader, styling, and index require no build step or external libraries.
+The [Journal](http://127.0.0.1:8000/journal.html) tells the project's development story in ten educational chapters, with hash-linked article reading, static diagrams, milestone Elo results, and exploration/auxiliary-target trials. Articles live as repository-owned HTML fragments in `web/journal/`; the reader, styling, and index require no build step or external libraries.
 
 ### AI catalog and arena
 
