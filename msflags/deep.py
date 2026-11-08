@@ -106,14 +106,24 @@ class DeepEvaluator:
 
 # ------------------------------------------------------------------ data
 def expert_game(job):
-    """One expert-vs-expert game with softmax exploration; returns position arrays."""
-    seed, temperature, explore_moves = job
+    """One expert-vs-expert game with softmax exploration; returns position arrays.
+
+    ``teacher="expert"`` labels positions with the 1-ply softmax of randomly
+    parameterized experts. ``teacher="expert2"`` uses fixed best parameters and
+    labels each position with the two-ply expert's chosen action (one-hot); the
+    first ``explore_moves`` moves are still sampled from the 1-ply softmax.
+    """
+    seed, temperature, explore_moves, teacher = job
     cfg = Config()
     rng = np.random.default_rng(seed)
     game = Game.random(cfg, rng)
-    params = [dict(alpha=float(rng.uniform(0.6, 1.6)), bomb_reserve=float(rng.uniform(0.5, 2.5)))
-              for _ in range(2)]
-    agents = [ExpertAgent(np.random.default_rng(rng.integers(1 << 62)), **p) for p in params]
+    if teacher == "expert2":
+        from .expert import Expert2Agent
+        agents = [Expert2Agent(np.random.default_rng(rng.integers(1 << 62)), bomb_reserve=3.0) for _ in range(2)]
+    else:
+        params = [dict(alpha=float(rng.uniform(0.6, 1.6)), bomb_reserve=float(rng.uniform(0.5, 2.5)))
+                  for _ in range(2)]
+        agents = [ExpertAgent(np.random.default_rng(rng.integers(1 << 62)), **p) for p in params]
     rows = dict(board=[], scores=[], to_move=[], bombs=[], probs=[], policy=[])
     moves = 0
     while not game.done:
@@ -129,11 +139,16 @@ def expert_game(job):
             actions, values, _ = agent.scores(pub)
             w = np.exp((values - values.max()) / temperature)
             w /= w.sum()
-            pi[actions] = w
+            if teacher == "expert2":
+                label = agent.act(pub)
+                pi[label] = 1.0
+            else:
+                label = int(actions[np.argmax(values)])
+                pi[actions] = w
             if moves < explore_moves:
                 action = int(actions[rng.choice(len(actions), p=w)])
             else:
-                action = int(actions[np.argmax(values)])
+                action = label
         rows["board"].append(pub.board.copy())
         rows["scores"].append(list(pub.scores))
         rows["to_move"].append(pub.to_move)
@@ -182,10 +197,11 @@ def _save(parts: list[dict], path: Path) -> int:
 
 
 def generate(games: int, out: str, seed: int, workers: int, temperature: float, explore_moves: int,
-             shard: int = 500) -> None:
+             shard: int = 500, teacher: str = "expert") -> None:
     """Write expert games to ``{out}-NNN.npz`` shards of ``shard`` games each."""
     started = time.monotonic()
-    jobs = [(int(s), temperature, explore_moves) for s in np.random.SeedSequence(seed).generate_state(games, np.uint64)]
+    jobs = [(int(s), temperature, explore_moves, teacher)
+            for s in np.random.SeedSequence(seed).generate_state(games, np.uint64)]
     Path(out).parent.mkdir(parents=True, exist_ok=True)
     parts, shards, positions, failures = [], 0, 0, []
     with mp.get_context("fork").Pool(workers) as pool:
@@ -338,6 +354,8 @@ def main() -> None:
     g.add_argument("--workers", type=int, default=18)
     g.add_argument("--temperature", type=float, default=0.3)
     g.add_argument("--explore-moves", type=int, default=20)
+    g.add_argument("--teacher", choices=("expert", "expert2"), default="expert")
+    g.add_argument("--shard", type=int, default=500)
     t = sub.add_parser("train")
     t.add_argument("--data", nargs="+", required=True)
     t.add_argument("--out", required=True)
@@ -361,7 +379,8 @@ def main() -> None:
     s.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     args = parser.parse_args()
     if args.cmd == "gen":
-        generate(args.games, args.out, args.seed, args.workers, args.temperature, args.explore_moves)
+        generate(args.games, args.out, args.seed, args.workers, args.temperature, args.explore_moves,
+                 shard=args.shard, teacher=args.teacher)
     elif args.cmd == "selfplay":
         torch.set_num_threads(1)
         selfplay(args.net, args.games, args.out, seed=args.seed, sims=args.sims,

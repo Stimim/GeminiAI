@@ -13,6 +13,7 @@ import argparse
 import importlib
 import json
 import multiprocessing as mp
+import sys
 import time
 
 import numpy as np
@@ -25,6 +26,7 @@ AGENTS = {
     "expert": "msflags.expert:ExpertAgent",
     "expert2": "msflags.expert:Expert2Agent",
     "deep": "msflags.deep:deep_agent",
+    "rollout": "msflags.rollout:rollout_agent",
 }
 
 
@@ -65,8 +67,14 @@ def play_layout(job):
 def run(a: str, b: str, layouts: int, seed: int, workers: int) -> dict:
     started = time.monotonic()
     jobs = [(a, b, seed, i) for i in range(layouts)]
+    results = []
     with mp.get_context("fork").Pool(workers) as pool:
-        results = pool.map(play_layout, jobs, chunksize=1)
+        for result in pool.imap_unordered(play_layout, jobs, chunksize=1):
+            results.append(result)
+            if len(results) % 10 == 0 and len(results) < layouts:
+                wins = sum(g[0] for r in results for g in r)
+                print(json.dumps(dict(progress=len(results), win_rate=round(wins / (2 * len(results)), 4),
+                                      seconds=round(time.monotonic() - started))), file=sys.stderr, flush=True)
     pairs = np.array([[g[0] for g in r] for r in results], dtype=float).mean(1)
     margin = np.array([g[1] - g[2] for r in results for g in r], dtype=float)
     boot = np.random.default_rng(seed)
