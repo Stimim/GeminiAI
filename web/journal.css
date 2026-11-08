@@ -28,6 +28,12 @@
 .article-body figure{margin:30px 0;background:#f5f8fb;border:1px solid var(--line);border-radius:12px;padding:16px}
 .article-body svg{display:block;width:100%;height:auto;font:14px system-ui,sans-serif;fill:var(--ink)}
 .article-body figcaption{font-size:12px;line-height:1.65;color:var(--muted);margin-top:12px}
+.article-body math{font-size:1.05em}
+.article-body math[display=block]{display:block;margin:4px 0 24px;font-size:1.2em;overflow-x:auto}
+.journal-table{width:100%;border-collapse:collapse;font-size:14px;line-height:1.5;margin:0 0 24px}
+.journal-table th,.journal-table td{border-bottom:1px solid var(--line);padding:8px 10px;text-align:left}
+.journal-table thead th{color:var(--muted);font-weight:650;font-size:12px}
+.journal-table td{font-variant-numeric:tabular-nums;white-space:nowrap}
 .diagram-node{fill:white;stroke:#b7c7d9;stroke-width:1.5}
 .diagram-mine{fill:#e9f5ef;stroke:#89b9aa;stroke-width:1.5}
 .diagram-edge{fill:none;stroke:var(--blue);stroke-width:2}

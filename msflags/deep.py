@@ -165,18 +165,46 @@ def deep_agent(rng=None, *, net: str, sims: int = 200, device: str = "cpu", c_pu
                      c_puct=c_puct, fpu_reduction=fpu_reduction, analysis=FastAnalysis)
 
 
-def generate(games: int, out: str, seed: int, workers: int, temperature: float, explore_moves: int) -> None:
-    started = time.monotonic()
-    jobs = [(int(s), temperature, explore_moves) for s in np.random.SeedSequence(seed).generate_state(games, np.uint64)]
-    with mp.get_context("fork").Pool(workers) as pool:
-        parts = pool.map(expert_game, jobs, chunksize=4)
+def _safe_expert_game(job):
+    try:
+        return expert_game(job)
+    except ValueError as error:  # reported and counted; one bad game must not discard a shard
+        return f"{type(error).__name__}: {error}"
+
+
+def _save(parts: list[dict], path: Path) -> int:
     data = {k: np.concatenate([p[k] for p in parts]) for k in parts[0]}
+    data["game"] = np.concatenate([np.full(len(p["z"]), i) for i, p in enumerate(parts)])
     data["policy"] = data["policy"].astype(np.float16)
     data["probs"] = data["probs"].astype(np.float16)
+    np.savez_compressed(path, **data)
+    return len(data["z"])
+
+
+def generate(games: int, out: str, seed: int, workers: int, temperature: float, explore_moves: int,
+             shard: int = 500) -> None:
+    """Write expert games to ``{out}-NNN.npz`` shards of ``shard`` games each."""
+    started = time.monotonic()
+    jobs = [(int(s), temperature, explore_moves) for s in np.random.SeedSequence(seed).generate_state(games, np.uint64)]
     Path(out).parent.mkdir(parents=True, exist_ok=True)
-    np.savez_compressed(out, **data)
-    print(json.dumps(dict(games=games, positions=len(data["z"]), out=out,
-                          seconds=round(time.monotonic() - started, 1))), flush=True)
+    parts, shards, positions, failures = [], 0, 0, []
+    with mp.get_context("fork").Pool(workers) as pool:
+        for result in pool.imap_unordered(_safe_expert_game, jobs, chunksize=2):
+            if isinstance(result, str):
+                failures.append(result)
+            else:
+                parts.append(result)
+            if len(parts) == shard:
+                positions += _save(parts, Path(f"{out}-{shards:03d}.npz"))
+                shards += 1
+                parts = []
+                print(json.dumps(dict(shards=shards, positions=positions, failures=len(failures),
+                                      seconds=round(time.monotonic() - started))), flush=True)
+    if parts:
+        positions += _save(parts, Path(f"{out}-{shards:03d}.npz"))
+        shards += 1
+    print(json.dumps(dict(games=games, shards=shards, positions=positions, failures=failures[:5],
+                          failure_count=len(failures), seconds=round(time.monotonic() - started, 1))), flush=True)
 
 
 def selfplay(net_path: str, games: int, out: str, *, seed: int, sims: int, concurrency: int,
