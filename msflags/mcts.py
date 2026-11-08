@@ -64,6 +64,7 @@ class Search:
         gumbel_noise: bool = True,
         gumbel_c_visit: float = 50.0,
         gumbel_c_scale: float = 0.1,
+        analysis=Analysis,
     ):
         self.pub = pub
         if search not in ("puct", "gumbel"):
@@ -86,7 +87,7 @@ class Search:
         self.dirichlet_alpha = dirichlet_alpha
         self.dirichlet_frac = dirichlet_frac
         self.rng = rng or np.random.default_rng()
-        self.analysis = Analysis(pub, rng=self.rng)
+        self.analysis = analysis(pub, rng=self.rng)
         self.root = root if root is not None and root.actions is not None else Node(pub.to_move)
         self.root.public_key = self.public_key(pub)
         if self.root.actions is not None:
