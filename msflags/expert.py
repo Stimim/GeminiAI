@@ -20,7 +20,7 @@ import numpy as np
 
 from .agents import Agent
 from .game import UNKNOWN, PublicState, neighbour_sum, neighbours, window_sum
-from .solver import Analysis
+from .fastsolve import FastAnalysis
 
 EPS = 1e-9
 
@@ -36,7 +36,7 @@ class ExpertAgent(Agent):
     def __init__(self, rng: np.random.Generator | None = None, *, samples: int = 48,
                  alpha: float = 1.0, cap: float = 0.9, bomb_reserve: float = 1.5,
                  interior_candidates: int = 12, bomb_candidates: int = 4,
-                 analysis=Analysis):
+                 analysis=FastAnalysis):
         self.rng = rng or np.random.default_rng()
         self.samples = samples
         self.alpha = alpha
@@ -91,10 +91,9 @@ class ExpertAgent(Agent):
         probs = analysis.probs
         board = pub.board
         unknown = board == UNKNOWN
-        layouts = np.array([analysis.sample(self.rng) for _ in range(self.samples)])
+        layouts = analysis.sample_many(self.samples, self.rng)
         counts = neighbour_sum(layouts.reshape(-1, cfg.h, cfg.w).astype(np.int8)).reshape(len(layouts), -1)
-        me, opp = pub.to_move, 1 - pub.to_move
-
+        me = pub.to_move
         frontier = np.zeros(cfg.n, dtype=bool)
         opened = (board >= 0) & (board <= 8)
         for i in np.flatnonzero(opened):

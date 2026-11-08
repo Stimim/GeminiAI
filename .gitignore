@@ -3,3 +3,4 @@ __pycache__/
 checkpoints/
 *.pt
 .pytest_cache/
+msflags/csrc/_fastsolve_*.so
