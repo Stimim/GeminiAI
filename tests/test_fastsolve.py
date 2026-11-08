@@ -124,3 +124,34 @@ def test_reproducibility_and_empty_batch():
         first.sample_many(-1)
     with pytest.raises(ValueError):
         FastAnalysis(pub, node_limit=0)
+
+
+def test_exact_retry_after_small_initial_budget():
+    # x+y=1, y+z=1; global count 1 forces the middle cell to be a mine.
+    pub = PublicState(Config(1, 5, 1), np.array([-1, 1, -1, 1, -1], dtype=np.int8),
+                      [0, 0], 0)
+    analysis = FastAnalysis(pub, node_limit=1, rng=np.random.default_rng(2))
+    assert analysis.exact
+    np.testing.assert_array_equal(analysis.probs, [0, 0, 1, 0, 0])
+    assert_consistent(pub, analysis.sample_many(20))
+
+
+def test_fallback_recovers_missing_global_count_support():
+    # Before count-support repair this consistent board raised
+    # "no consistent global mine count": all 48 approximate solutions missed
+    # the component count buckets needed by the global total.
+    rng = np.random.default_rng(1376)
+    game = Game.random(Config(8, 8, 13), rng)
+    safe = np.flatnonzero(~game.mines)
+    opened = rng.choice(safe, 12, replace=False)
+    game.board[opened] = game.counts[opened]
+    pub = game.public()
+    analysis = FastAnalysis(pub, node_limit=1, rng=np.random.default_rng(11376))
+    assert not analysis.exact
+    assert np.isfinite(analysis.probs).all()
+    np.testing.assert_allclose(analysis.probs.sum(), pub.remaining_mines, atol=1e-9)
+    assert_consistent(pub, analysis.sample_many(100, np.random.default_rng(7)))
+    again = FastAnalysis(pub, node_limit=1, rng=np.random.default_rng(11376))
+    np.testing.assert_array_equal(analysis.probs, again.probs)
+    np.testing.assert_array_equal(analysis.sample_many(30, np.random.default_rng(8)),
+                                  again.sample_many(30, np.random.default_rng(8)))

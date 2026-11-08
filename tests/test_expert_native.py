@@ -80,3 +80,19 @@ def test_custom_analysis_remains_on_python_path():
     pub = Game.random(Config(4, 4, 4), np.random.default_rng(1)).public()
     ExpertAgent(np.random.default_rng(2), analysis=CustomAnalysis).scores(pub)
     assert CustomAnalysis.calls > 1
+
+
+def test_native_scores_on_global_count_regression_board():
+    rng = np.random.default_rng(1376)
+    game = Game.random(Config(8, 8, 13), rng)
+    opened = rng.choice(np.flatnonzero(~game.mines), 12, replace=False)
+    game.board[opened] = game.counts[opened]
+    python = ExpertAgent(np.random.default_rng(11376), native=False)
+    native = ExpertAgent(np.random.default_rng(11376), native=True)
+    actions, values, probs = python.scores(game.public())
+    actual_actions, actual_values, actual_probs = native.scores(game.public())
+    np.testing.assert_array_equal(actions, actual_actions)
+    np.testing.assert_array_equal(probs, actual_probs)
+    np.testing.assert_allclose(values, actual_values, atol=1e-9, rtol=0)
+    np.testing.assert_array_equal(python.rng.integers(2**63, size=20),
+                                  native.rng.integers(2**63, size=20))

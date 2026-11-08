@@ -18,6 +18,7 @@ typedef struct {
     Stats *stats;
     size_t nodes, limit;
     int overflow, failed, remaining, probabilities_only, borrowed_stats;
+    int approximate, target;
     uint64_t *rng;
     double density;
 } Component;
@@ -40,12 +41,14 @@ typedef struct ComponentMemo {
 } ComponentMemo;
 
 static int *component_key(Component *c, size_t *length, uint64_t *hash) {
-    size_t size=3+(size_t)c->nc*2+c->m;
+    size_t size=5+(size_t)c->nc*2+c->m;
     for (int i=0;i<c->m;++i) size+=c->degree[i];
     int *key=malloc(size*sizeof(int));
     if (!key) return NULL;
     size_t p=0;
     key[p++]=c->m; key[p++]=c->nc; key[p++]=c->remaining;
+    key[p++]=(int)(uint32_t)c->limit;
+    key[p++]=(int)(uint32_t)((uint64_t)c->limit>>32);
     for (int q=0;q<c->nc;++q) { key[p++]=c->need[q]; key[p++]=c->left[q]; }
     for (int i=0;i<c->m;++i) {
         key[p++]=c->degree[i];
@@ -112,9 +115,10 @@ static void record(Component *c, int k) {
 }
 /* Always unwind mutable constraint state, including early success/overflow. */
 static int dfs(Component *c, int i, int k, int randomize) {
+    if (c->target>=0 && (k>c->target || c->m-i<c->target-k)) return 0;
     if (++c->nodes > c->limit) { c->overflow=1; return 0; }
     if (i == c->m) { record(c,k); return 1; }
-    int first = randomize && uniform(c->rng)<c->density;
+    int first = randomize==1 && uniform(c->rng)<c->density;
     for (int branch=0; branch<2; ++branch) {
         int v=first ^ branch, ok=1;
         if (k+v>c->remaining) continue;
@@ -131,6 +135,20 @@ static int dfs(Component *c, int i, int k, int randomize) {
         if (c->overflow || c->failed || (randomize && found)) return found;
     }
     return 0;
+}
+
+/* Complete missing count support only after approximate statistics fail global
+ * conditioning. A deterministic, count-constrained search has no sampling
+ * budget: exhaustion proves that a bucket is genuinely impossible. */
+static int complete_count_support(Component *c) {
+    c->limit=SIZE_MAX;
+    for (int k=0;k<=c->m && k<=c->remaining;++k) if (!c->stats[k].count) {
+        c->target=k; c->nodes=0; c->overflow=0;
+        dfs(c,0,0,2);
+        if (c->failed) { c->target=-1; return 0; }
+    }
+    c->target=-1;
+    return 1;
 }
 static int root(int *parent, int x) {
     while (parent[x]!=x) { parent[x]=parent[parent[x]]; x=parent[x]; }
@@ -230,6 +248,7 @@ static void *fs_create_impl(int h, int w, int mines, int remaining, const int8_t
             cq++;
         }
         c->remaining=remaining; c->rng=&seed; c->density=(double)remaining/(unknown ? unknown:1); c->limit=limit;
+        c->target=-1;
         c->probabilities_only=probabilities_only;
         size_t key_length=0;
         uint64_t key_hash=0;
@@ -245,13 +264,26 @@ static void *fs_create_impl(int h, int w, int mines, int remaining, const int8_t
             dfs(c,0,0,0);
             if (c->failed) { free(key); goto fail; }
             if (c->overflow) {
+                /* Retry exact search before discarding its statistics. Keep
+                 * the original budget in the memo key made above. */
+                clear_stats(c);
+                size_t retry=limit>1000000/20 ? 1000000:limit*20;
+                if (retry<limit) retry=limit;
+                c->limit=retry; c->nodes=0; c->overflow=0;
+                dfs(c,0,0,0);
+                if (c->failed) { free(key); goto fail; }
+            }
+            if (c->overflow) {
                 free(key); key=NULL;
-                *exact=0; clear_stats(c);
+                *exact=0; c->approximate=1; clear_stats(c);
                 c->limit=limit>10000 ? limit:10000;
                 for (int attempt=0;attempt<48;++attempt) {
                     c->nodes=0; c->overflow=0; dfs(c,0,0,1);
                     if (c->failed) goto fail;
                 }
+                size_t found=0;
+                for (int k=0;k<=c->m;++k) found+=c->stats[k].count;
+                if (!found && !complete_count_support(c)) goto fail;
             }
             if (key) {
                 ComponentMemo *entry=malloc(sizeof(ComponentMemo));
@@ -262,13 +294,17 @@ static void *fs_create_impl(int h, int w, int mines, int remaining, const int8_t
         }
         size_t count=0; for (int k=0;k<=c->m;++k) count+=c->stats[k].count;
         if (!count) { message="could not find a consistent component layout"; goto fail; }
-        for (int k=0;k<=c->m;++k) if (c->stats[k].count)
-            c->stats[k].logcount=log((double)c->stats[k].count);
         c->rng=NULL;
     }
     size_t stride=(size_t)remaining+1;
     s->suffix=malloc(((size_t)s->nc+1)*stride*sizeof(double));
     if (!s->suffix) goto fail;
+rebuild_suffix:
+    for (int j=0;j<s->nc;++j) {
+        Component *c=s->components+j;
+        for (int k=0;k<=c->m;++k) if (c->stats[k].count)
+            c->stats[k].logcount=log((double)c->stats[k].count);
+    }
     for (int r=0;r<=remaining;++r)
         s->suffix[(size_t)s->nc*stride+r]=r>s->ni ? -INFINITY :
             logfactorial ? logfactorial[s->ni]-logfactorial[r]-logfactorial[s->ni-r] :
@@ -283,7 +319,17 @@ static void *fs_create_impl(int h, int w, int mines, int remaining, const int8_t
         }
     }
     double z=s->suffix[remaining];
-    if (!isfinite(z)) { message="no consistent global mine count"; goto fail; }
+    if (!isfinite(z)) {
+        int repaired=0;
+        for (int j=0;j<s->nc;++j) {
+            Component *c=s->components+j;
+            if (!c->approximate) continue;
+            if (!complete_count_support(c)) goto fail;
+            c->approximate=0; repaired=1;
+        }
+        if (repaired) goto rebuild_suffix;
+        message="no consistent global mine count"; goto fail;
+    }
     double *forward=malloc(stride*sizeof(double)), *next=malloc(stride*sizeof(double));
     if (!forward || !next) { free(forward); free(next); goto fail; }
     for (int p=0;p<=remaining;++p) forward[p]=-INFINITY;

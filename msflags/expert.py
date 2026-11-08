@@ -179,3 +179,95 @@ class ExpertAgent(Agent):
         actions, values, _ = self.scores(pub)
         best = np.flatnonzero(values >= values.max() - 1e-9)
         return int(actions[self.rng.choice(best)])
+
+
+class Expert2Agent(ExpertAgent):
+    """Two-ply expert: the opponent's reply is valued by the full one-ply expert.
+
+    The top ``top`` one-ply candidates are re-scored as gain minus the expected
+    ``certain mines + beta * best one-ply score`` of the opponent after each
+    sampled outcome, so a move that leaves the opponent only bad options counts
+    in our favour. Outcomes come from layouts consistent with the public board.
+    """
+
+    name = "expert2"
+
+    def __init__(self, rng: np.random.Generator | None = None, *, top: int = 8, beta: float = 1.0,
+                 samples2: int = 32, **kwargs):
+        super().__init__(rng, **kwargs)
+        self.top = top
+        self.beta = beta
+        self.samples2 = samples2
+        self.inner = ExpertAgent(self.rng, **kwargs)
+        self._cache2: dict[bytes, float] = {}
+
+    def _reply_advantage(self, game) -> float:
+        """Opponent to move in `game`: their certain mines plus beta times their best score."""
+        key = game.board.tobytes() + bytes(game.scores) + bytes(game.bombs)
+        hit = self._cache2.get(key)
+        if hit is not None:
+            return hit
+        pub = game.public()
+        cfg = pub.cfg
+        probs = FastAnalysis(pub, rng=self.rng).probs
+        unknown = pub.board == UNKNOWN
+        sure = np.flatnonzero(unknown & (probs >= 1 - EPS))
+        player = pub.to_move
+        if pub.scores[player] + len(sure) >= cfg.win_score:
+            value = float(cfg.mines)  # they win outright
+        else:
+            board = pub.board.copy()
+            board[sure] = 9 + player
+            scores = list(pub.scores)
+            scores[player] += len(sure)
+            after = PublicState(cfg, board, scores, player, None, list(pub.bombs))
+            if (board == UNKNOWN).any():
+                _, values, _ = self.inner.scores(after)
+                best = float(values.max()) if len(values) else 0.0
+            else:
+                best = 0.0
+            value = len(sure) + self.beta * best
+        self._cache2[key] = value
+        return value
+
+    def act(self, pub: PublicState) -> int:
+        from .game import Game
+        probs = self.analysis(pub, rng=self.rng).probs
+        sure = np.flatnonzero((pub.board == UNKNOWN) & (probs >= 1 - EPS))
+        if len(sure):
+            return int(sure[0])
+        actions, values, _ = self.scores(pub)
+        if len(actions) <= 1:
+            return int(actions[0])
+        self._cache2.clear()
+        order = np.argsort(-values)[: self.top]
+        layouts = FastAnalysis(pub, rng=self.rng).sample_many(self.samples2, self.rng)
+        cfg = pub.cfg
+        me = pub.to_move
+        best_action, best_value = int(actions[order[0]]), -np.inf
+        for i in order:
+            a = int(actions[i])
+            total = 0.0
+            for layout in layouts:
+                g = Game.determinize(pub, layout)
+                before = g.scores[me]
+                g.step(a)
+                gained = g.scores[me] - before
+                if a < cfg.n:
+                    if gained:
+                        continue  # hit: accounted by the guess value below
+                    total -= self._reply_advantage(g)
+                else:
+                    if g.done:
+                        total += cfg.mines
+                        continue
+                    total += gained - self._reply_advantage(g)
+            if a < cfg.n:
+                p = float(probs[a])
+                safe = int((~layouts[:, a]).sum())
+                value = float(guess_value(p, self.cap)) + (total / safe if safe else 0.0)
+            else:
+                value = total / len(layouts) - self.bomb_reserve
+            if value > best_value:
+                best_action, best_value = a, value
+        return best_action

@@ -23,6 +23,7 @@ AGENTS = {
     "random": "msflags.agents:RandomAgent",
     "solver": "msflags.agents:SolverAgent",
     "expert": "msflags.expert:ExpertAgent",
+    "expert2": "msflags.expert:Expert2Agent",
     "deep": "msflags.deep:deep_agent",
 }
 

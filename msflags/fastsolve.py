@@ -2,9 +2,12 @@
 
 The C engine is compiled lazily at first import using gcc and cached beside its
 source under a content-hashed name. No Python extension or extra dependency is
-needed. Components are enumerated exactly up to ``node_limit``; on overflow,
-48 randomized backtracking solutions give approximate statistics. Global mine
-conditioning uses log-space dynamic programming, including interior binomials.
+needed. Components first use ``node_limit``, then retry exact enumeration with
+20 times that budget (the increase is capped at one million nodes). Remaining
+overflows use 48 randomized backtracking solutions. Global mine conditioning
+uses log-space dynamic programming, including interior binomials. If approximate
+count buckets cannot combine globally, unbudgeted count-constrained searches
+complete their feasible support before conditioning again.
 
 Like Analysis, probabilities on opened and claimed cells are zero (the array
 is intended for selecting unknown cells). Samples include claimed mines. Exact
@@ -70,7 +73,8 @@ class FastAnalysis:
     """Drop-in probability/sampling API with native enumeration and batching.
 
     Approximate fallback searches have a minimum budget of 10,000 nodes per
-    attempt, so small enumeration limits can still yield consistent samples.
+    attempt. Missing global count support triggers complete, count-constrained
+    searches; these are finite but can be expensive on difficult components.
     Inconsistent constraints or mine counts raise ValueError.
     """
 
