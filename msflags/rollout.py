@@ -59,18 +59,23 @@ class RolloutAgent(Agent):
         return actions
 
     def act(self, pub: PublicState) -> int:
+        cand, values = self.search(pub)
+        return int(cand[int(np.argmax(values))])
+
+    def search(self, pub: PublicState) -> tuple[np.ndarray, np.ndarray]:
+        """Candidate actions and their mean rollout values (one forced action → value 0)."""
         cfg = pub.cfg
         analysis = FastAnalysis(pub, rng=self.rng)
         sure = np.flatnonzero((pub.board == UNKNOWN) & (analysis.probs >= 1 - EPS))
         if len(sure):
-            return int(sure[0])
+            return sure[:1], np.zeros(1)
         policy, _, _ = self.ev([(pub.board, pub.scores, pub.to_move, pub.bombs)], cfg, analysis.probs[None])
         legal = pub.legal_mask()
         prior = np.where(legal, policy[0], -1.0)
         cand = np.argsort(-prior)[: self.candidates]
         cand = cand[prior[cand] >= 0]
         if len(cand) == 1:
-            return int(cand[0])
+            return cand, np.zeros(1)
         layouts = analysis.sample_many(self.rollouts, self.rng)
         me = pub.to_move
         games, owner = [], []
@@ -96,7 +101,7 @@ class RolloutAgent(Agent):
             for g, ci in zip(games, owner):
                 win = 1.0 if g.winner == me else -1.0
                 totals[ci] += win + self.margin_weight * (g.scores[me] - g.scores[1 - me])
-            return int(cand[int(np.argmax(totals))])
+            return cand, totals / len(layouts)
         open_games = [g for g in games if not g.done]
         sure = {}
         if open_games:
@@ -115,7 +120,7 @@ class RolloutAgent(Agent):
             sign = 1.0 if g.to_move == me else -1.0
             totals[ci] += (g.scores[me] - g.scores[1 - me] + sign * sure[id(g)]
                            + self.bomb_value * (g.bombs[me] - g.bombs[1 - me]))
-        return int(cand[int(np.argmax(totals))])
+        return cand, totals / len(layouts)
 
 
 _NETS = {}

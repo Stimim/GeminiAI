@@ -121,6 +121,11 @@ def expert_game(job):
     if teacher == "expert2":
         from .expert import Expert2Agent
         agents = [Expert2Agent(np.random.default_rng(rng.integers(1 << 62)), bomb_reserve=3.0) for _ in range(2)]
+    elif teacher.startswith("rollout:"):
+        # "rollout:<net path>": two-turn truncated rollouts over 128 posterior layouts.
+        from .rollout import rollout_agent
+        agents = [rollout_agent(np.random.default_rng(rng.integers(1 << 62)), net=teacher.split(":", 1)[1],
+                                turns=2, rollouts=128) for _ in range(2)]
     else:
         params = [dict(alpha=float(rng.uniform(0.6, 1.6)), bomb_reserve=float(rng.uniform(0.5, 2.5)))
                   for _ in range(2)]
@@ -137,11 +142,17 @@ def expert_game(job):
             pi[sure] = 1.0 / len(sure)
             action = int(sure[0])
         else:
-            actions, values, _ = agent.scores(pub)
+            if teacher.startswith("rollout:"):
+                actions, values = agent.search(pub)
+            else:
+                actions, values, _ = agent.scores(pub)
             w = np.exp((values - values.max()) / temperature)
             w /= w.sum()
             if teacher == "expert2":
                 label = agent.act(pub)
+                pi[label] = 1.0
+            elif teacher.startswith("rollout:"):
+                label = int(actions[np.argmax(values)])
                 pi[label] = 1.0
             else:
                 label = int(actions[np.argmax(values)])
@@ -205,7 +216,9 @@ def generate(games: int, out: str, seed: int, workers: int, temperature: float, 
             for s in np.random.SeedSequence(seed).generate_state(games, np.uint64)]
     Path(out).parent.mkdir(parents=True, exist_ok=True)
     parts, shards, positions, failures = [], 0, 0, []
-    with mp.get_context("fork").Pool(workers) as pool:
+    # CUDA cannot be initialized in forked children; GPU teachers need fresh processes.
+    context = "spawn" if teacher.startswith("rollout:") else "fork"
+    with mp.get_context(context).Pool(workers) as pool:
         for result in pool.imap_unordered(_safe_expert_game, jobs, chunksize=2):
             if isinstance(result, str):
                 failures.append(result)
@@ -355,7 +368,7 @@ def main() -> None:
     g.add_argument("--workers", type=int, default=18)
     g.add_argument("--temperature", type=float, default=0.3)
     g.add_argument("--explore-moves", type=int, default=20)
-    g.add_argument("--teacher", choices=("expert", "expert2"), default="expert")
+    g.add_argument("--teacher", default="expert", help="expert | expert2 | rollout:<net checkpoint>")
     g.add_argument("--shard", type=int, default=500)
     t = sub.add_parser("train")
     t.add_argument("--data", nargs="+", required=True)
