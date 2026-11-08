@@ -13,7 +13,7 @@ from __future__ import annotations
 import numpy as np
 
 from .agents import Agent
-from .expert import EPS
+from .expert import EPS, guess_value
 from .fastsolve import FastAnalysis, batch_probs
 from .game import UNKNOWN, Game, PublicState
 
@@ -23,7 +23,8 @@ class RolloutAgent(Agent):
 
     def __init__(self, evaluator, rng: np.random.Generator | None = None, *, candidates: int = 6,
                  rollouts: int = 32, margin_weight: float = 0.02, horizon: int = 400,
-                 turns: int = 0, bomb_value: float = 2.5, win_value: float = 30.0):
+                 turns: int = 0, bomb_value: float = 2.5, win_value: float = 30.0, alpha: float = 1.0,
+                 cap: float = 0.9):
         """``turns=0`` plays to the end and scores win/loss (+ margin_weight × margin).
 
         ``turns=k`` stops each playout after k changes of turn and scores it in
@@ -40,6 +41,8 @@ class RolloutAgent(Agent):
         self.turns = turns
         self.bomb_value = bomb_value
         self.win_value = win_value
+        self.alpha = alpha
+        self.cap = cap
 
     def _seed(self) -> int:
         return int(self.rng.integers(0, np.iinfo(np.uint64).max, dtype=np.uint64))
@@ -100,7 +103,11 @@ class RolloutAgent(Agent):
             probs = batch_probs(np.array([g.board for g in open_games], dtype=np.int8),
                                 np.array([g.scores for g in open_games]), cfg, seed=self._seed())
             for g, p in zip(open_games, probs):
-                sure[id(g)] = int(((g.board == UNKNOWN) & (p >= 1 - EPS)).sum())
+                unknown = g.board == UNKNOWN
+                certain = unknown & (p >= 1 - EPS)
+                rest = p[unknown & ~certain]
+                best = float(guess_value(rest.max(), self.cap)) if rest.size else 0.0
+                sure[id(g)] = int(certain.sum()) + self.alpha * best
         for g, ci in zip(games, owner):
             if g.done:
                 totals[ci] += self.win_value if g.winner == me else -self.win_value
