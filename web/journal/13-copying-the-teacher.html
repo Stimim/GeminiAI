@@ -1,0 +1,39 @@
+<p class="article-intro">Two chapters of search had failed to beat a hand-written formula. This one starts with a correction, then copies the teacher: first its moves, then its judgement. Copying moves worked almost perfectly. Copying judgement worked well enough to fool the error bars, but not well enough to win.</p>
+<h2>First, the scoreboard</h2>
+<p>All earlier comparisons were unrecorded benchmarks. We then put the experts on the solver-anchored ledger, alongside the old self-play networks. The result was humbling. The one-ply expert won 343 of 400 games against the solver, but only 96 of 200 against the old r32x3 generation 115 and 92 of 200 against r64x4 generation 201. Those networks had quietly reached the same plateau by self-play. Chapter 11 now carries a correction.</p>
+<p>The two-ply expert, which re-scores its best eight moves by the opponent's full one-ply reply, won 58 of 100 against generation 201. It is the first agent clearly above the old plateau.</p>
+<table class="journal-table">
+<thead><tr><th>Agent</th><th>Ledger Elo</th><th>±95%</th></tr></thead>
+<tbody>
+<tr><th>Two-ply expert</th><td>1389</td><td>86</td></tr>
+<tr><th>r64x4 g201 greedy (old self-play)</th><td>1334</td><td>52</td></tr>
+<tr><th>r32x3 g115 greedy (old self-play)</th><td>1324</td><td>45</td></tr>
+<tr><th>One-ply expert</th><td>1309</td><td>41</td></tr>
+<tr><th>Greedy solver (anchor)</th><td>1000</td><td>—</td></tr>
+</tbody>
+</table>
+<h2>Copying moves</h2>
+<p>The two-ply expert is slow, a second or more per decision, and its games take 150 CPU-seconds each. We still generated them overnight: fixed best settings, the first 20 moves sampled from the one-ply softmax for variety, and every position labelled one-hot with the two-ply choice. After only 500 games (61,000 positions) we fine-tuned net-0 for three minutes. Its greedy policy, now about a millisecond per move, beat the one-ply expert <strong>60.0%</strong> (300 games, 95% CI 54.7–65.7%). The teacher itself scores 63% in the same matchup. Imitation captured nearly all of the second ply.</p>
+<h2>Searching with a short ruler</h2>
+<p>Chapter 12 showed that full-game playouts are too noisy to rank moves. So we cut them short. After <math><mi>k</mi></math> changes of turn, a playout is scored in mines, the expert's own unit:</p>
+<math display="block"><mrow><mi>v</mi><mo>=</mo><mo>(</mo><msub><mi>s</mi><mtext>me</mtext></msub><mo>−</mo><msub><mi>s</mi><mtext>opp</mtext></msub><mo>)</mo><mo>±</mo><mo>(</mo><msub><mi>S</mi><mtext>to move</mtext></msub><mo>+</mo><mi>α</mi><mspace width="0.2em"/><msub><mi>G</mi><mtext>to move</mtext></msub><mo>)</mo><mo>+</mo><mn>2.5</mn><mspace width="0.2em"/><mo>(</mo><msub><mi>b</mi><mtext>me</mtext></msub><mo>−</mo><msub><mi>b</mi><mtext>opp</mtext></msub><mo>)</mo></mrow></math>
+<p>Here <math><mi>S</mi></math> counts certain mines and <math><mi>G</mi></math> is the best guess value of whoever moves next, and <math><mi>b</mi></math> marks an unused bomb. The sign is + when we are to move and − otherwise. The horizon behaved exactly as the noise argument predicts:</p>
+<figure>
+<svg viewBox="0 0 660 230" role="img" aria-labelledby="horizon-title horizon-desc">
+<title id="horizon-title">Truncated rollouts against the one-ply expert</title>
+<desc id="horizon-desc">Distilled net with 32-layout rollouts against the one-ply expert. Two turns: 61.7 percent. Four turns: 60.0 percent. Eight turns: 55.0 percent. Full game with net-0: 34.2 percent. The greedy distilled policy alone: 60.0 percent.</desc>
+<g class="chart-grid"><path d="M220 20V180M320 20V180M420 20V180M520 20V180M620 20V180"/></g>
+<g class="diagram-small"><text x="220" y="200" text-anchor="middle">30%</text><text x="320" y="200" text-anchor="middle">40%</text><text x="420" y="200" text-anchor="middle">50%</text><text x="520" y="200" text-anchor="middle">60%</text><text x="620" y="200" text-anchor="middle">70%</text></g>
+<path class="diagram-edge diagram-teal" stroke-dasharray="5 5" d="M520 20V180"/><text class="diagram-small" x="514" y="16" text-anchor="end">greedy policy 60%</text>
+<g><text x="8" y="44">2 turns</text><text x="8" y="79">4 turns</text><text x="8" y="114">8 turns</text><text x="8" y="149">Full game (net-0)</text></g>
+<path class="chart-medium" d="M477 40H597M463 75H573M413 110H527M170 145H353"/>
+<g class="chart-dot-medium"><circle cx="537" cy="40" r="6"/><circle cx="520" cy="75" r="6"/><circle cx="470" cy="110" r="6"/><circle cx="262" cy="145" r="6"/></g>
+</svg>
+<figcaption>Win rate against the one-ply expert with 95% paired-layout intervals. The three truncated runs use 300 games each with net-1p; the full-game run used 120 games with the older net-0, so it is context, not a matched comparison.</figcaption>
+</figure>
+<p>Against its own greedy policy, the two-turn search with 128 layouts won <strong>55.7%</strong> (300 games, CI 50.3–60.7%). One turn won 53.3%. A real gain, but a modest one: the policy had already learned most of what a short look-ahead can see.</p>
+<h2>Copying judgement</h2>
+<p>The two-ply expert's cost comes from one inner question, asked hundreds of times: <em>how good is this position for the player about to move?</em> Its answer, certain mines plus the best one-ply score, is a smooth number in mines that depends on the position, not on who eventually won. Unlike the win/loss label of chapter 12, it cannot be memorized by recognizing the game. We computed it for 150,000 positions and trained a value network to predict it. On whole held-out games the error was 1.03 mines, against a target spread of 5.17: about 96% of the variance explained.</p>
+<p>Replacing the inner expert with one batched network call made the two-ply search 13× faster (266 ms against 3.4 s per decision). It also made it weaker. It won 54.3% against the one-ply expert (the original scores 63%) and 45% head to head against the original. Explaining 96% of the variance sounds excellent, but the moves being compared usually differ by a few tenths of a mine. An error of one mine is small compared with the board's spread and large compared with the decision. We saw the same thing in chapter 12: what matters is the error relative to the differences between candidate moves, not to the spread of positions.</p>
+<h2>Where that leaves the target</h2>
+<p>The strongest agent is the two-ply expert at 1389 ± 86. Its fast imitation and search variants sit in the same neighbourhood. Each step up the ladder has been worth tens of Elo, not hundreds, and the solver anchor compresses everything near the top. Even a 90% win rate against it is only about +380. The 3000 target is not in sight. What is in sight is a cheaper copy of the best player, followed by another round of the same trick.</p>
