@@ -11,6 +11,7 @@ derived from the public board, so the network never sees hidden information.
 from __future__ import annotations
 
 import argparse
+from concurrent.futures import ProcessPoolExecutor, as_completed
 import json
 import multiprocessing as mp
 import time
@@ -218,8 +219,10 @@ def generate(games: int, out: str, seed: int, workers: int, temperature: float, 
     parts, shards, positions, failures = [], 0, 0, []
     # CUDA cannot be initialized in forked children; GPU teachers need fresh processes.
     context = "spawn" if teacher.startswith("rollout:") else "fork"
-    with mp.get_context(context).Pool(workers) as pool:
-        for result in pool.imap_unordered(_safe_expert_game, jobs, chunksize=2):
+    # A killed worker (OOM guard) raises BrokenProcessPool instead of hanging like Pool.
+    with ProcessPoolExecutor(workers, mp_context=mp.get_context(context)) as pool:
+        for future in as_completed([pool.submit(_safe_expert_game, job) for job in jobs]):
+            result = future.result()
             if isinstance(result, str):
                 failures.append(result)
             else:

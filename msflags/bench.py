@@ -10,6 +10,7 @@ as floats/ints. Example::
 from __future__ import annotations
 
 import argparse
+from concurrent.futures import ProcessPoolExecutor, as_completed
 import importlib
 import json
 import multiprocessing as mp
@@ -69,9 +70,11 @@ def run(a: str, b: str, layouts: int, seed: int, workers: int) -> dict:
     started = time.monotonic()
     jobs = [(a, b, seed, i) for i in range(layouts)]
     results = []
-    with mp.get_context("fork").Pool(workers) as pool:
-        for result in pool.imap_unordered(play_layout, jobs, chunksize=1):
-            results.append(result)
+    # ProcessPoolExecutor raises BrokenProcessPool if a worker is killed (e.g. by the
+    # OOM guard); multiprocessing.Pool would silently lose the task and hang.
+    with ProcessPoolExecutor(workers, mp_context=mp.get_context("fork")) as pool:
+        for future in as_completed([pool.submit(play_layout, job) for job in jobs]):
+            results.append(future.result())
             if len(results) % 10 == 0 and len(results) < layouts:
                 wins = sum(g[0] for r in results for g in r)
                 print(json.dumps(dict(progress=len(results), win_rate=round(wins / (2 * len(results)), 4),
