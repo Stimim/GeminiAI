@@ -122,11 +122,19 @@ Medium MCTS-100 won **131/200 (65.5%, 95% CI 58.7–71.7%)** against solver with
 
 The reset archived **100** retired-agent games and retained **21** solver/random games. Backup: `checkpoints/arena/games-before-reset-1793983677327548715.jsonl`. Bootstrap and promoted self-play checkpoints are pinned in `msflags/generations.json`.
 
+## Expert agent and native solver
+
+`msflags/fastsolve.py` compiles `msflags/csrc/fastsolve.c` with gcc on first import (content-hashed `.so` cache, gitignored) and exposes `FastAnalysis(pub)`: the same exact probabilities as `Analysis`, plus exact-uniform `sample()` / `sample_many(n)`. Real game positions average 56 µs.
+
+`msflags/expert.py` (`ExpertAgent`) claims certain mines first; otherwise it maximizes `p/(1-p)` (guess value, `cap` 0.9) or a bomb's expected mines minus `bomb_reserve`, minus the expected opponent advantage: certain mines plus `alpha` × their best guess value, averaged over clue outcomes from `samples` consistent layouts. It reads only the public board.
+
+`msflags/bench.py` runs unrecorded paired-layout matches in parallel: `uv run python -m msflags.bench expert:bomb_reserve=3 solver --layouts 300 --workers 18`. Against the solver (600 games, seed 7000): default expert **84.0%** (95% CI 81.2–86.8), `bomb_reserve=3` **85.7%** (82.7–88.5), `alpha=2` 78.2%, `samples=128` 82.2%, `interior_candidates=40` 80.3%.
+
 ## Web UI
 
 Run the server with `uv run python -m msflags.server` and open http://127.0.0.1:8000. Neural catalog entries use pinned timestamped checkpoints; random and solver need no weights. Use `--host`, `--port`, and `--device cpu|cuda` to configure it. The interface supports human-vs-AI, AI-vs-AI, and hot-seat games, with hints and move-by-move animation.
 
-The [Journal](http://127.0.0.1:8000/journal.html) tells the project's development story in ten educational chapters, with hash-linked article reading, static diagrams, milestone Elo results, and exploration/auxiliary-target trials. Articles live as repository-owned HTML fragments in `web/journal/`; the reader, styling, and index require no build step or external libraries.
+The [Journal](http://127.0.0.1:8000/journal.html) tells the project's development story in educational chapters, with hash-linked article reading, static diagrams, milestone Elo results, exploration/auxiliary-target trials, and the expert/search push toward a 3000-Elo target. Articles live as repository-owned HTML fragments in `web/journal/`; the reader, styling, and index require no build step or external libraries.
 
 ### AI catalog and arena
 
