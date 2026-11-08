@@ -1,0 +1,27 @@
+<p class="article-intro">The pieces finally fitted together. A short search that beats its own policy, and a network that copies a teacher almost perfectly, make a loop: search, copy, repeat. The first turn of that loop worked. Then the machine started quietly killing our workers.</p>
+<h2>Search, copy, repeat</h2>
+<p>Expert iteration alternates two operators. Search turns a policy into a slightly stronger player; distillation turns that player back into a policy that costs a millisecond per move:</p>
+<figure>
+<svg viewBox="0 0 660 210" role="img" aria-labelledby="loop-title loop-desc">
+<title id="loop-title">The expert-iteration loop</title>
+<desc id="loop-desc">The network k feeds a two-turn rollout search over 128 posterior layouts. The search plays games and labels each position with its chosen move. Training on those labels produces network k plus one. A greedy gate against network k decides whether the new network becomes the next teacher.</desc>
+<rect class="diagram-node" x="20" y="75" width="140" height="56" rx="8"/><text x="90" y="100" text-anchor="middle">Network k</text><text class="diagram-small" x="90" y="118" text-anchor="middle">~1 ms per move</text>
+<path class="diagram-edge" d="M160 103H230"/>
+<rect class="diagram-mine" x="230" y="65" width="180" height="76" rx="8"/><text x="320" y="92" text-anchor="middle">Rollout search</text><text class="diagram-small" x="320" y="110" text-anchor="middle">2 turns × 128 layouts</text><text class="diagram-small" x="320" y="127" text-anchor="middle">labels every move</text>
+<path class="diagram-edge" d="M410 103H480"/>
+<rect class="diagram-node" x="480" y="75" width="160" height="56" rx="8"/><text x="560" y="100" text-anchor="middle">Network k + 1</text><text class="diagram-small" x="560" y="118" text-anchor="middle">fine-tuned on labels</text>
+<path class="diagram-edge diagram-teal" d="M560 131V175H90V131"/>
+<text class="diagram-small" x="325" y="195" text-anchor="middle">promote only if it beats network k in a greedy gate</text>
+</svg>
+<figcaption>Each pass costs hours of search and minutes of training. The search is the expensive teacher; the network is the cheap student who becomes the next teacher.</figcaption>
+</figure>
+<p>The starting point was net-1, the network distilled from the two-ply expert. On the ledger it won 182 of 200 against the solver and 126 of 200 against the one-ply expert, rating <strong>1404 ± 49</strong>. That made it the strongest agent so far, at a thousandth of its teacher's cost.</p>
+<p>The rollout search on top of net-1 labelled 900 games. net-2 was fine-tuned on those labels plus the two-ply expert's games, then played net-1 greedily on 400 shared layouts. It won <strong>56.5%</strong> (800 games, 95% CI 52.9–60.0%). The search's advantage over its own policy, 55.7% in the previous chapter, carried over almost entirely into a policy that needs no search.</p>
+<h2>The silent killer</h2>
+<p>While the first iteration ran, a benchmark sat for four and a half hours without printing a line. Training jobs died after five seconds with exit code 143, a polite SIGTERM. The culprit was <code>earlyoom</code>. It is configured to terminate Python processes when free memory falls below 10%. Every worker that loads PyTorch and CUDA holds about 1.4 GB, and we had eight teacher workers and six benchmark workers on a 16 GB machine.</p>
+<p>The kills explained the hang. When <code>multiprocessing.Pool</code> loses a worker, the task that worker held is never retried and never reported. The pool waits for it forever. Both the benchmark and the data generator now use <code>ProcessPoolExecutor</code>, which raises <code>BrokenProcessPool</code> instead. Concurrent CUDA processes are capped at five. A crash you can see is a bug; a silent hang is a lost afternoon.</p>
+<h2>A compressed ruler</h2>
+<p>The second ledger round put net-2 at the top: 90 of 100 against the solver, 64 of 100 against the one-ply expert, 56 of 100 against net-1. Its rating is <strong>1394 ± 52</strong>; net-1 slipped to 1360 after a weaker 78 of 100 against the solver in the same round. Hundred-game samples move ratings by tens of points.</p>
+<p>The bigger lesson is the shape of the scale. Head to head, net-2 beats the one-ply expert by about 100 Elo. Against the solver, the two score 90% and 86%, a difference of only about 70:</p>
+<math display="block"><mrow><mn>400</mn><mspace width="0.2em"/><msub><mi>log</mi><mn>10</mn></msub><mfrac><mn>0.90</mn><mn>0.10</mn></mfrac><mo>−</mo><mn>400</mn><mspace width="0.2em"/><msub><mi>log</mi><mn>10</mn></msub><mfrac><mn>0.86</mn><mn>0.14</mn></mfrac><mo>≈</mo><mn>382</mn><mo>−</mo><mn>315</mn><mo>=</mo><mn>67</mn></mrow></math>
+<p>In chapter 11's loss analysis each player made about 18 genuine guesses per game. Some games are lost to those dice however well the rest is played. As skill rises, the win rate against a fixed anchor saturates below 100%, so the ratings near the top are compressed. To reach 3000 an agent would have to lose about one game in a hundred thousand to an opponent that is often lucky. Each loop iteration buys tens of Elo; the target needs another 1,600. We are running the loop anyway and will report where it stops.</p>
