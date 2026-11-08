@@ -1,3 +1,4 @@
 [
-  {"id": "p96x8-n1", "checkpoint": "checkpoints/deep/net-1.pt", "description": "Distilled from the two-ply expert"}
+  {"id": "p96x8-n1", "checkpoint": "checkpoints/deep/net-1.pt", "description": "Distilled from the two-ply expert"},
+  {"id": "p96x8-n2", "checkpoint": "checkpoints/deep/net-2.pt", "description": "Expert iteration 1: distilled from rollout(net-1)"}
 ]
