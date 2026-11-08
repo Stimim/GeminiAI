@@ -25,6 +25,7 @@ AGENTS = {
     "solver": "msflags.agents:SolverAgent",
     "expert": "msflags.expert:ExpertAgent",
     "expert2": "msflags.expert:Expert2Agent",
+    "netexpert2": "msflags.netexpert:netexpert2_agent",
     "deep": "msflags.deep:deep_agent",
     "rollout": "msflags.rollout:rollout_agent",
 }

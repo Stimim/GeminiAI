@@ -181,6 +181,34 @@ class ExpertAgent(Agent):
         return int(actions[self.rng.choice(best)])
 
 
+def reply_advantage(pub_or_game, inner: ExpertAgent, beta: float = 1.0) -> float:
+    """Value the player to move as certain mines plus beta times their best score.
+
+    Accept a public state or game, without caching or changing its state. Analysis
+    and one-ply scoring both consume ``inner.rng``. Reaching the winning score
+    through certain mines is valued as the full mine count.
+    """
+    pub = pub_or_game if isinstance(pub_or_game, PublicState) else pub_or_game.public()
+    cfg = pub.cfg
+    probs = FastAnalysis(pub, rng=inner.rng).probs
+    unknown = pub.board == UNKNOWN
+    sure = np.flatnonzero(unknown & (probs >= 1 - EPS))
+    player = pub.to_move
+    if pub.scores[player] + len(sure) >= cfg.win_score:
+        return float(cfg.mines)
+    board = pub.board.copy()
+    board[sure] = 9 + player
+    scores = list(pub.scores)
+    scores[player] += len(sure)
+    after = PublicState(cfg, board, scores, player, None, list(pub.bombs))
+    if (board == UNKNOWN).any():
+        _, values, _ = inner.scores(after)
+        best = float(values.max()) if len(values) else 0.0
+    else:
+        best = 0.0
+    return len(sure) + beta * best
+
+
 class Expert2Agent(ExpertAgent):
     """Two-ply expert: the opponent's reply is valued by the full one-ply expert.
 
@@ -207,26 +235,7 @@ class Expert2Agent(ExpertAgent):
         hit = self._cache2.get(key)
         if hit is not None:
             return hit
-        pub = game.public()
-        cfg = pub.cfg
-        probs = FastAnalysis(pub, rng=self.rng).probs
-        unknown = pub.board == UNKNOWN
-        sure = np.flatnonzero(unknown & (probs >= 1 - EPS))
-        player = pub.to_move
-        if pub.scores[player] + len(sure) >= cfg.win_score:
-            value = float(cfg.mines)  # they win outright
-        else:
-            board = pub.board.copy()
-            board[sure] = 9 + player
-            scores = list(pub.scores)
-            scores[player] += len(sure)
-            after = PublicState(cfg, board, scores, player, None, list(pub.bombs))
-            if (board == UNKNOWN).any():
-                _, values, _ = self.inner.scores(after)
-                best = float(values.max()) if len(values) else 0.0
-            else:
-                best = 0.0
-            value = len(sure) + self.beta * best
+        value = reply_advantage(game, self.inner, self.beta)
         self._cache2[key] = value
         return value
 

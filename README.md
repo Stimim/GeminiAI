@@ -148,6 +148,27 @@ The expert matches the old self-play plateau; expert2 is the first agent above i
 
 `msflags/deep.py`: `DeepNet` reads the 20 public planes plus solver probability / certain-mine / certain-safe planes. `gen` writes sharded expert games (`--teacher expert` softmax labels, or `--teacher expert2` one-hot two-ply choices); `train` holds out whole games; `selfplay` runs batched Gumbel MCTS. net-0 (96×8, 6,000 expert games): greedy 78.2% vs solver, 39.3% vs expert; its value head memorizes games (held-out MSE 0.82). MCTS-128 on the pilot net regressed (73.5% vs its greedy 84%). `msflags/rollout.py` (greedy-policy playouts on posterior layouts, 6 candidates × 32) scored 34.2% vs expert: full-game outcomes are too noisy (SE ≈ 0.17) to rank moves. `msflags/deeploop.py` drives self-play/retrain iterations.
 
+### Distilled reply-value expert
+
+`msflags/vnet.py` learns the reusable `reply_advantage` target (certain mines plus the best full one-ply continuation, in mines units). Generation uniformly samples positions from expert-a/b shards, **including positions with certain mines**, labels them with `ExpertAgent(bomb_reserve=3)`, and preserves source-game identities. Training holds out complete source games, applies dihedral augmentation, and reports held-out RMSE against target standard deviation. `ValueNet` shares DeepNet's 23-plane residual trunk but uses an unbounded scalar head.
+
+```bash
+.venv/bin/python -m msflags.vnet gen --positions 300000 --workers 6
+.venv/bin/python -m msflags.vnet train --device cuda --out checkpoints/deep/value.pt
+.venv/bin/python -m msflags.bench netexpert2:net=checkpoints/deep/value.pt,device=cuda expert:bomb_reserve=3 --layouts 150 --workers 6
+```
+
+`NetExpert2Agent` retains the expert's top-eight / 32-layout decision procedure, but predicts all candidate reply states in one network batch. Mine hits on opens are still accounted for by geometric guess value; winning bomb outcomes and replies that can claim an immediate win are handled exactly, without network approximation. `beta` scales only the continuation component, not certain-mine gains. Checkpoints and target shards live under `checkpoints/deep/`.
+
+Measured run (`checkpoints/deep/value.pt`, 96×8, seed 1): 170,000 targets persisted in 17 shards; training used shards 000–014 (150,000 positions), with 135,132 fitting positions and 14,868 held-out positions from 1,198 complete source games. After 10,000 CUDA steps (464.5 s), held-out RMSE was **1.030 mines**, versus target standard deviation **5.170**. Across all 170k saved targets: mean 0.091, std 5.124, range −4.920 to 51, median −0.825, 90th percentile 0.920, 99th percentile 14.353. The first generation attempt timed out before persisting targets; the replacement writes incremental shards without a deadline and was stopped after training to free benchmark workers.
+
+| Paired-layout benchmark (seed 7000, 6 workers, CUDA) | Wins | Win rate (paired bootstrap 95% CI) | Wall time |
+|---|---:|---:|---:|
+| netexpert2 vs expert, both bomb_reserve=3, 150 layouts | 163/300 | 54.3% (49.0–59.7%) | 1,238 s |
+| netexpert2 vs expert2, both bomb_reserve=3, 50 layouts | 45/100 | 45.0% (36.0–54.0%) | 2,672 s |
+
+On the same 32 uniformly sampled source positions **without certain mines** (sampling seed 2026; one warm-up per agent; CUDA synchronized), mean/median decision times were expert **173/12 ms**, expert2 **3,396/300 ms**, and netexpert2 **266/61 ms**. Mean netexpert2 latency was 12.8× lower than expert2, but its 54.3% result against expert did **not** reproduce the full expert2 reference's 63%; the observed intervals also do not establish a significant advantage over expert.
+
 ## Web UI
 
 Run the server with `uv run python -m msflags.server` and open http://127.0.0.1:8000. Neural catalog entries use pinned timestamped checkpoints; random, solver, expert, and expert2 need no weights. Use `--host`, `--port`, and `--device cpu|cuda` to configure it. The interface supports human-vs-AI, AI-vs-AI, and hot-seat games, with hints and move-by-move animation.
