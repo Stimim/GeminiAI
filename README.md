@@ -134,6 +134,20 @@ Measured on three default 16×16 expert-vs-expert games (layout seeds 4200–420
 
 `msflags/bench.py` runs unrecorded paired-layout matches in parallel: `uv run python -m msflags.bench expert:bomb_reserve=3 solver --layouts 300 --workers 18`. Against the solver (600 games, seed 7000): default expert **84.0%** (95% CI 81.2–86.8), `bomb_reserve=3` **85.7%** (82.7–88.5), `alpha=2` 78.2%, `samples=128` 82.2%, `interior_candidates=40` 80.3%.
 
+`Expert2Agent` (catalog `expert2`) re-scores the top eight one-ply moves by the opponent's full one-ply reply over 32 sampled layouts. Unrecorded: expert2 vs expert **63%** (200 games, 95% CI 56.5–69.5), vs solver 86.5% (200). Ledger (recorded arena games, solver = 1000):
+
+| Agent | Ledger games | Result | Elo |
+|---|---|---|---|
+| expert | 400 vs solver; 200 each vs r32x3 g115 / r64x4 g201 greedy | 343/400; 96/200; 92/200 | 1309 ± 41 |
+| expert2 | 100 vs r64x4 g201 greedy | 58/100 | 1389 ± 86 |
+| r64x4 g201 greedy (old self-play) | — | — | 1334 ± 52 |
+
+The expert matches the old self-play plateau; expert2 is the first agent above it.
+
+### Probability-aware network and search experiments
+
+`msflags/deep.py`: `DeepNet` reads the 20 public planes plus solver probability / certain-mine / certain-safe planes. `gen` writes sharded expert games (`--teacher expert` softmax labels, or `--teacher expert2` one-hot two-ply choices); `train` holds out whole games; `selfplay` runs batched Gumbel MCTS. net-0 (96×8, 6,000 expert games): greedy 78.2% vs solver, 39.3% vs expert; its value head memorizes games (held-out MSE 0.82). MCTS-128 on the pilot net regressed (73.5% vs its greedy 84%). `msflags/rollout.py` (greedy-policy playouts on posterior layouts, 6 candidates × 32) scored 34.2% vs expert: full-game outcomes are too noisy (SE ≈ 0.17) to rank moves. `msflags/deeploop.py` drives self-play/retrain iterations.
+
 ## Web UI
 
 Run the server with `uv run python -m msflags.server` and open http://127.0.0.1:8000. Neural catalog entries use pinned timestamped checkpoints; random, solver, expert, and expert2 need no weights. Use `--host`, `--port`, and `--device cpu|cuda` to configure it. The interface supports human-vs-AI, AI-vs-AI, and hot-seat games, with hints and move-by-move animation.
