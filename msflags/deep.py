@@ -23,7 +23,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from .expert import EPS, ExpertAgent
-from .fastsolve import FastAnalysis
+from .fastsolve import FastAnalysis, batch_probs
 from .game import NUM_PLANES, UNKNOWN, Config, Game, PublicState, encode_batch
 from .model import ResBlock
 
@@ -94,8 +94,9 @@ class DeepEvaluator:
         to_move = np.array([s[2] for s in states])
         bombs = np.array([s[3] for s in states])
         if probs is None:
-            probs = np.array([FastAnalysis(PublicState(cfg, b, list(sc), int(t), None, list(bo))).probs
-                              for b, sc, t, bo in zip(boards, scores, to_move, bombs)])
+            probs = batch_probs(boards, scores, cfg,
+                                seed=int(np.random.default_rng().integers(
+                                    0, np.iinfo(np.uint64).max, dtype=np.uint64)))
         x = torch.from_numpy(encode_deep(boards, scores, to_move, bombs, probs, cfg)).to(self.device)
         with torch.autocast(device_type=self.device.type, dtype=torch.bfloat16,
                             enabled=self.device.type == "cuda"):

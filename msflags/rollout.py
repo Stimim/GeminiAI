@@ -14,7 +14,7 @@ import numpy as np
 
 from .agents import Agent
 from .expert import EPS
-from .fastsolve import FastAnalysis
+from .fastsolve import FastAnalysis, batch_probs
 from .game import UNKNOWN, Game, PublicState
 
 
@@ -32,8 +32,9 @@ class RolloutAgent(Agent):
 
     def _greedy(self, games: list[Game], cfg) -> list[int]:
         states = [(g.board, g.scores, g.to_move, g.bombs) for g in games]
-        probs = np.array([FastAnalysis(PublicState(cfg, g.board, list(g.scores), g.to_move, None, list(g.bombs)),
-                                       rng=self.rng).probs for g in games])
+        probs = batch_probs(np.array([g.board for g in games], dtype=np.int8),
+                            np.array([g.scores for g in games]), cfg,
+                            seed=int(self.rng.integers(0, np.iinfo(np.uint64).max, dtype=np.uint64)))
         policy, _, _ = self.ev(states, cfg, probs)
         actions = []
         for g, pi, p in zip(games, policy, probs):

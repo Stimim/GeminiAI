@@ -59,6 +59,14 @@ static int *component_key(Component *c, size_t *length, uint64_t *hash) {
     *length=size;
     return key;
 }
+
+static void free_component_memo(ComponentMemo **memo) {
+    for (int i=0;i<4096;++i) while (memo[i]) {
+        ComponentMemo *entry=memo[i]; memo[i]=entry->next;
+        for (int k=0;k<=entry->m;++k) { free(entry->stats[k].hits); free(entry->stats[k].layouts); }
+        free(entry->stats); free(entry->key); free(entry);
+    }
+}
 static uint64_t next_random(uint64_t *s) {
     uint64_t z = (*s += UINT64_C(0x9e3779b97f4a7c15));
     z = (z ^ (z >> 30)) * UINT64_C(0xbf58476d1ce4e5b9);
@@ -366,6 +374,41 @@ void *fs_create(int h, int w, int mines, int remaining, const int8_t *board,
     return fs_create_impl(h,w,mines,remaining,board,limit,seed,probs,exact,error,0,NULL,NULL);
 }
 
+int fs_batch_probs(int h, int w, int mines, const int8_t *boards,
+                   const int32_t *scores, size_t count, size_t limit,
+                   uint64_t seed, double *probs, size_t *failed, char *error) {
+    ComponentMemo *memo[4096]={0};
+    double *logfactorial=NULL;
+    int ok=0;
+    *failed=0;
+    if (h<=0 || w<=0 || h>INT_MAX/w || mines<0 || mines>h*w) {
+        snprintf(error,256,"invalid board dimensions or mine count"); goto done;
+    }
+    int n=h*w;
+    if (!count) return 1;
+    logfactorial=malloc(((size_t)n+1)*sizeof(double));
+    if (!logfactorial) { snprintf(error,256,"out of memory"); goto done; }
+    for (int i=0;i<=n;++i) logfactorial[i]=lgamma(i+1.);
+    for (size_t i=0;i<count;++i) {
+        *failed=i;
+        int64_t remaining=(int64_t)mines-scores[2*i]-scores[2*i+1];
+        if (remaining<0 || remaining>n) {
+            snprintf(error,256,"invalid mine count"); goto done;
+        }
+        int exact;
+        void *solver=fs_create_impl(h,w,mines,(int)remaining,boards+i*n,
+                                   limit,next_random(&seed),probs+i*n,&exact,
+                                   error,1,memo,logfactorial);
+        if (!solver) goto done;
+        fs_free(solver);
+    }
+    ok=1;
+done:
+    free(logfactorial);
+    free_component_memo(memo);
+    return ok;
+}
+
 int fs_sample_many(void *ptr, size_t count, uint64_t seed, unsigned char *out) {
     Solver *s=ptr;
     size_t stride=(size_t)s->remaining+1;
@@ -586,10 +629,6 @@ done:
     free(cache.entries); free(cache.probs); free(nb); free(degree); free(stack);
     free(counts); free(outcomes); free(weights); free(current);
     free(cache.logfactorial);
-    for (int i=0;i<4096;++i) while (memo[i]) {
-        ComponentMemo *entry=memo[i]; memo[i]=entry->next;
-        for (int k=0;k<=entry->m;++k) { free(entry->stats[k].hits); free(entry->stats[k].layouts); }
-        free(entry->stats); free(entry->key); free(entry);
-    }
+    free_component_memo(memo);
     return ok;
 }

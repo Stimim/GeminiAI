@@ -14,6 +14,9 @@ is intended for selecting unknown cells). Samples include claimed mines. Exact
 components retain all enumerated solutions, so sampling within a mine-count
 bucket is exactly uniform rather than limited to a reservoir. Random streams
 are reproducible but not identical to Analysis's NumPy stream.
+
+``batch_probs`` computes many boards in one native call, sharing exact component
+statistics within the batch without retaining sampling layouts or native state.
 """
 from __future__ import annotations
 
@@ -29,7 +32,7 @@ import weakref
 
 import numpy as np
 
-from .game import PublicState
+from .game import Config, PublicState
 
 
 def _load_library():
@@ -59,6 +62,12 @@ def _load_library():
     library.fs_free.restype = None
     library.fs_sample_many.argtypes = [ctypes.c_void_p, ctypes.c_size_t, ctypes.c_uint64, ctypes.c_void_p]
     library.fs_sample_many.restype = ctypes.c_int
+    library.fs_batch_probs.argtypes = [
+        ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_void_p,
+        ctypes.c_void_p, ctypes.c_size_t, ctypes.c_size_t, ctypes.c_uint64,
+        ctypes.c_void_p, ctypes.POINTER(ctypes.c_size_t), ctypes.c_char_p,
+    ]
+    library.fs_batch_probs.restype = ctypes.c_int
     return library
 
 
@@ -67,6 +76,53 @@ _LIB = _load_library()
 
 def _seed(rng: np.random.Generator) -> int:
     return int(rng.integers(0, np.iinfo(np.uint64).max, dtype=np.uint64))
+
+
+def batch_probs(boards: np.ndarray, scores: np.ndarray, cfg: Config, *,
+                node_limit: int = 50_000, seed: int) -> np.ndarray:
+    """Return float64 ``[B, N]`` probabilities with batch-local exact memoization.
+
+    Boards and scores have shapes ``[B, cfg.n]`` and ``[B, 2]``. Opened and
+    claimed cells have probability zero, as with :class:`FastAnalysis`.
+    Approximate fallbacks use reproducible independent board streams from seed;
+    inconsistent positions raise ValueError identifying their batch index.
+    """
+    node_limit = operator.index(node_limit)
+    if node_limit < 1 or node_limit > np.iinfo(np.uintp).max:
+        raise ValueError("node_limit must be a positive size_t")
+    seed = operator.index(seed)
+    if not 0 <= seed <= np.iinfo(np.uint64).max:
+        raise ValueError("seed must be a uint64")
+    if (not 0 < cfg.h <= np.iinfo(np.int32).max
+            or not 0 < cfg.w <= np.iinfo(np.int32).max // cfg.h):
+        raise ValueError("invalid board dimensions")
+    if not 0 <= cfg.mines <= cfg.n:
+        raise ValueError("invalid mine count")
+    raw = np.asarray(boards)
+    raw_scores = np.asarray(scores)
+    if raw.ndim != 2 or raw.shape[1] != cfg.n:
+        raise ValueError("boards must have shape (B, cfg.n)")
+    if raw_scores.shape != (len(raw), 2):
+        raise ValueError("scores must have shape (B, 2)")
+    valid = np.all((raw >= -1) & (raw <= 10) & (raw == np.floor(raw)), axis=1)
+    bad = np.flatnonzero(~valid)
+    if len(bad):
+        raise ValueError(f"board {bad[0]}: invalid public board")
+    valid_scores = np.all((raw_scores >= 0) & (raw_scores <= cfg.n)
+                          & (raw_scores == np.floor(raw_scores)), axis=1)
+    bad = np.flatnonzero(~valid_scores)
+    if len(bad):
+        raise ValueError(f"board {bad[0]}: invalid scores")
+    boards = np.ascontiguousarray(raw, dtype=np.int8)
+    scores = np.ascontiguousarray(raw_scores, dtype=np.int32)
+    result = np.empty(boards.shape, dtype=np.float64)
+    failed = ctypes.c_size_t()
+    error = ctypes.create_string_buffer(256)
+    if not _LIB.fs_batch_probs(cfg.h, cfg.w, cfg.mines, boards.ctypes.data,
+                               scores.ctypes.data, len(boards), node_limit, seed,
+                               result.ctypes.data, ctypes.byref(failed), error):
+        raise ValueError(f"board {failed.value}: {error.value.decode()}")
+    return result
 
 
 class FastAnalysis:

@@ -2,7 +2,7 @@
 import numpy as np
 import pytest
 
-from msflags.fastsolve import FastAnalysis
+from msflags.fastsolve import FastAnalysis, batch_probs
 from msflags.game import UNKNOWN, Config, Game, PublicState, neighbour_sum
 from msflags.solver import Analysis
 
@@ -50,6 +50,34 @@ def test_random_midgame_parity_and_samples(cfg):
         assert_consistent(pub, native.sample_many(12))
         assert_consistent(pub, native.sample()[None, :])
     assert compared >= 10
+
+
+def test_batch_probs_matches_individual_positions():
+    cfg = Config(8, 8, 13)
+    pubs = list(positions(cfg, range(10), 12))
+    assert len(pubs) == 100
+    boards = np.array([pub.board for pub in pubs], dtype=np.int8)
+    scores = np.array([pub.scores for pub in pubs])
+    actual = batch_probs(boards, scores, cfg, seed=200)
+    assert actual.dtype == np.float64
+    for pub, probs in zip(pubs, actual):
+        analysis = FastAnalysis(pub, rng=np.random.default_rng(200))
+        assert analysis.exact
+        np.testing.assert_allclose(probs, analysis.probs, atol=1e-12, rtol=0)
+    np.testing.assert_array_equal(batch_probs(boards, scores, cfg, seed=200), actual)
+    assert batch_probs(boards[:0], scores[:0], cfg, seed=0).shape == (0, cfg.n)
+
+
+def test_batch_probs_names_inconsistent_board():
+    cfg = Config(1, 3, 1)
+    boards = np.array([[-1, -1, -1], [0, -1, 1]], dtype=np.int8)
+    with pytest.raises(ValueError, match="board 1:"):
+        batch_probs(boards, np.zeros((2, 2), dtype=int), cfg, seed=0)
+    boards[1, 0] = 11
+    with pytest.raises(ValueError, match="board 1:"):
+        batch_probs(boards, np.zeros((2, 2), dtype=int), cfg, seed=0)
+    with pytest.raises(ValueError, match="node_limit"):
+        batch_probs(boards[:1], np.zeros((1, 2), dtype=int), cfg, node_limit=0, seed=0)
 
 
 @pytest.mark.parametrize("seed", [2, 4, 8])
