@@ -1,9 +1,11 @@
 import json
 
+import numpy as np
 import pytest
 import torch
 
 from msflags import registry
+from msflags.expert import ExpertAgent, Expert2Agent
 from msflags.model import Net, NetConfig, save
 
 
@@ -72,7 +74,7 @@ def test_metrics_after_timestamp_do_not_change_identity(tmp_path):
     assert registry.training_counts(path, dict(stage='bootstrap')) == (8000, 0)
 
 
-def test_six_categories_share_pins_and_keep_missing_identity(tmp_path, pins):
+def test_eight_categories_share_pins_and_keep_missing_identity(tmp_path, pins):
     bootstrap = tmp_path / 'arbitrary-name.pt'
     bootstrap.touch()
     missing = tmp_path / 'not-installed.pt'
@@ -81,7 +83,7 @@ def test_six_categories_share_pins_and_keep_missing_identity(tmp_path, pins):
     categories = registry.catalog()
     assert [e['id'] for e in categories] == [
         'r64x4.greedy', 'r64x4.mcts100-c1.5', 'r32x3.greedy',
-        'r32x3.mcts100-c1.5', 'random', 'solver',
+        'r32x3.mcts100-c1.5', 'random', 'solver', 'expert', 'expert2',
     ]
     for category in categories[:2]:
         assert [e['generation'] for e in category['generations']] == [0, 10]
@@ -108,7 +110,7 @@ def test_latest_available_is_generation_order_not_append_order(tmp_path, pins):
         path.touch()
         pins('r32x3', path, selfplay=generation)
     assert registry.resolve('r32x3.greedy') == 'r32x3-bs8k-sp20.greedy'
-    assert len(registry.entries()) == 8  # Three pins, two search categories, two baselines.
+    assert len(registry.entries()) == 10  # Three pins, two search categories, four baselines.
 
 
 def test_duplicate_paths_and_derived_ids_rejected(tmp_path, pins):
@@ -147,12 +149,27 @@ def test_category_detail_uses_latest_available_and_create_resolves(tmp_path, pin
     assert registry.create('r32x3-bs8k-sp10.greedy') is evaluator
 
 
-def test_baseline_detail_combines_category_and_generation(pins):
-    detail = registry.detail('solver')
-    assert detail['default_generation'] == 'solver'
-    assert detail['generations'][0]['id'] == 'solver'
+@pytest.mark.parametrize('agent_id', ['random', 'solver', 'expert', 'expert2'])
+def test_baseline_detail_combines_category_and_generation(pins, agent_id):
+    detail = registry.detail(agent_id)
+    assert detail['default_generation'] == agent_id
+    assert len(detail['generations']) == 1
+    assert detail['generations'][0]['id'] == agent_id
+    assert detail['generations'][0]['generation'] == 0
+    assert detail['available']
     assert detail['shape'] is None
-    assert registry.resolve('random') == 'random'
+    assert 'checkpoint' not in detail
+    assert not detail['request_sims']
+    assert registry.resolve(agent_id) == agent_id
+
+
+@pytest.mark.parametrize('agent_id,agent_type', [('expert', ExpertAgent), ('expert2', Expert2Agent)])
+def test_create_expert_baselines_uses_rng_and_reserve(pins, agent_id, agent_type):
+    rng = np.random.default_rng(42)
+    agent = registry.create(agent_id, rng=rng)
+    assert type(agent) is agent_type
+    assert agent.rng is rng
+    assert agent.bomb_reserve == 3
 
 
 def test_promote_appends_shared_immutable_pin_and_rejects_duplicates(tmp_path, pins, monkeypatch):
@@ -196,7 +213,7 @@ def test_promote_rejects_latest_and_incompatible_weights(tmp_path, pins):
 
 def test_cli_list_and_promote_error(pins, capsys):
     registry.main(['list'])
-    assert len(json.loads(capsys.readouterr().out)) == 6
+    assert len(json.loads(capsys.readouterr().out)) == 8
     with pytest.raises(SystemExit) as error:
         registry.main(['promote', 'latest.pt'])
     assert error.value.code == 2

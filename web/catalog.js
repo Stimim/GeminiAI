@@ -1,7 +1,7 @@
 'use strict';
 
 window.AgentCatalog = (() => {
-  const neural = category => category && !['random', 'solver'].includes(category.id);
+  const neural = category => category && ['net', 'mcts'].includes(category.kind);
   const generations = category => [...(category?.generations || [])].sort((a, b) => Number(b.generation ?? 0) - Number(a.generation ?? 0) || Number(b.training?.bootstrap ?? 0) - Number(a.training?.bootstrap ?? 0) || b.id.localeCompare(a.id));
   const categoryFor = (categories, id) => categories.find(category => category.id === id || category.generations.some(generation => generation.id === id));
   const resolve = (category, value) => value || category?.default_generation || '';

@@ -144,6 +144,21 @@ def finish(manager):
     assert not manager._thread.is_alive(), "arena worker did not finish"
 
 
+@pytest.mark.parametrize('agent_id', ['expert', 'expert2'])
+def test_expert_baseline_match_completes(tmp_path, agent_id):
+    path = tmp_path / "games.jsonl"
+    manager = arena.ArenaManager(path, cfg=Config(2, 3, 3))
+    match = manager.start(agent_id, "solver", 2, seed=7)
+    finish(manager)
+    result = manager.status(match["id"])
+    assert result["status"] == "completed", result["error"]
+    assert result["completed"] == 2
+    assert result["error"] is None
+    records = [json.loads(line) for line in path.read_text().splitlines()]
+    assert records == result["results"]
+    assert [record["seats"] for record in records] == [[agent_id, "solver"], ["solver", agent_id]]
+
+
 def test_match_persists_alternating_seats_and_reloads_ratings(tmp_path, fake_registry):
     path = tmp_path / "arena" / "games.jsonl"
     manager = arena.ArenaManager(path, cfg=Config(2, 3, 3))

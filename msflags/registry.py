@@ -1,4 +1,4 @@
-"""Six categories backed by immutable, shared architecture generation pins.
+"""Eight categories backed by immutable, shared architecture generation pins.
 
 generations.json retains checkpoint-derived training counts even without weights.
 Each generation is one JSON line; never repoint an existing record. Bootstrap,
@@ -16,6 +16,7 @@ import numpy as np
 import torch
 
 from .agents import MCTSAgent, NetAgent, RandomAgent, SolverAgent
+from .expert import ExpertAgent, Expert2Agent
 from .game import Config, NUM_PLANES
 from .model import Evaluator, load
 
@@ -48,6 +49,12 @@ CATEGORIES = [
     dict(id='solver', name='Greedy exact solver', kind='solver', settings={},
          summary='Claims certain mines, otherwise maximizes immediate expected gain.',
          explanation='Builds constraints from visible clues and the remaining mine count. Opens certain mines first, otherwise uses the highest expected-mine 5×5 window when worth at least three mines; ties are random. Tractable frontiers are enumerated exactly; difficult components use bounded sampling. Its Elo is fixed at 1000.'),
+    dict(id='expert', name='Expert (gift-aware, 1-ply)', kind='expert', settings=dict(bomb_reserve=3),
+         summary='Claims certain mines, then balances expected gain against gifts to the opponent.',
+         explanation='Claims certain mines first. Scores guesses as p/(1-p) minus the expected opponent gift from clues sampled from layouts consistent with the public board. Bombs trade expected mine gain against the opponent gift and a reserve of three. It never reads hidden mines.'),
+    dict(id='expert2', name='Expert (gift-aware, 2-ply)', kind='expert2', settings=dict(bomb_reserve=3),
+         summary='Gift-aware expert that re-scores top moves against the opponent’s best one-ply reply.',
+         explanation='Claims certain mines first. Starts with guess scores p/(1-p) minus the expected opponent gift from clues sampled from layouts consistent with the public board, then re-scores top moves by the opponent’s best one-ply reply. Bombs use a reserve of three. It never reads hidden mines.'),
 ]
 _identities: dict[tuple[str, int], tuple[dict, dict]] = {}
 
@@ -297,8 +304,10 @@ def _generation_detail(agent_id):
 def create(agent_id, sims=None, rng=None):
     entry = _entry(agent_id)
     rng = rng if rng is not None else np.random.default_rng()
-    if entry['kind'] == 'random': return RandomAgent(rng)
-    if entry['kind'] == 'solver': return SolverAgent(rng)
+    baselines = {'random': RandomAgent, 'solver': SolverAgent,
+                 'expert': ExpertAgent, 'expert2': Expert2Agent}
+    if entry['kind'] in baselines:
+        return baselines[entry['kind']](rng, **entry['settings'])
     path = Path(entry['checkpoint'])
     if not path.is_file(): raise ValueError(f'unavailable agent: {agent_id}')
     key = (str(path.resolve()), _device)
