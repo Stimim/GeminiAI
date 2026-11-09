@@ -159,8 +159,9 @@ The expert matches the old self-play plateau; expert2 is the first agent above i
 | loop iterations 1–4 (rollout(net-2/net-002/net-003)) | gates 48.2 / 53.0 / 50.3 / 50.8%; net-003 vs net-2 54.7% (1,000, CI 51.5–57.9) |
 | rollout(net-2) vs net-2 greedy | 48.7% (300); 256 layouts × 10 candidates 53.0% (300) — search has stopped improving the policy |
 | **net-003 (catalog `p96x8-n3.greedy`) vs solver** | **88.45% (2,000 games, CI 87.1–89.8) → +352 direct** |
+| loop iteration 5; 128×10 net from scratch on all teacher data | 50.8% (1,000); 50.3% vs net-003 (1,000) — plateau; loop stopped (resumes from `checkpoints/deep/iter/loop.jsonl`) |
 
-Ledger (solver = 1000) after round 3: p96x8-n3 **1395 ± 53**, p96x8-n2 1386 ± 51, p96x8-n1 1352 ± 36, expert2 1330 ± 45, r64x4 g201 greedy 1319, expert ~1300. A 3000 rating needs ≈ 99.999% against the solver; win rates against it saturate near 85–90% for every strong agent tested (journal chapter 15).
+Final ledger (solver = 1000, 9,963 games): **p96x8-n3 1383 ± 27** (1,500 games; 801/900 vs solver, 216/400 vs n2, 60/100 vs expert2, 67/100 vs expert), p96x8-n2 1366 ± 29, p96x8-n1 1345 ± 34, expert2 1323 ± 42, old r64x4 g201 greedy ~1300. A 3000 rating needs ≈ 99.999% against the solver; a luck audit of 600 n3–solver games (`scripts/luck_audit.py`) finds half of n3's losses would flip with neutral luck, putting a fair player's ceiling near 93% (journal chapter 15).
 
 ### Distilled reply-value expert
 
