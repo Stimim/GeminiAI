@@ -146,7 +146,21 @@ The expert matches the old self-play plateau; expert2 is the first agent above i
 
 ### Probability-aware network and search experiments
 
-`msflags/deep.py`: `DeepNet` reads the 20 public planes plus solver probability / certain-mine / certain-safe planes. `gen` writes sharded expert games (`--teacher expert` softmax labels, or `--teacher expert2` one-hot two-ply choices); `train` holds out whole games; `selfplay` runs batched Gumbel MCTS. net-0 (96×8, 6,000 expert games): greedy 78.2% vs solver, 39.3% vs expert; its value head memorizes games (held-out MSE 0.82). MCTS-128 on the pilot net regressed (73.5% vs its greedy 84%). `msflags/rollout.py` (greedy-policy playouts on posterior layouts, 6 candidates × 32) scored 34.2% vs expert: full-game outcomes are too noisy (SE ≈ 0.17) to rank moves. `msflags/deeploop.py` drives self-play/retrain iterations.
+`msflags/deep.py`: `DeepNet` reads the 20 public planes plus solver probability / certain-mine / certain-safe planes. `gen` writes sharded teacher games (`--teacher expert` softmax labels, `--teacher expert2` one-hot two-ply choices, or `--teacher rollout:<net>` one-hot truncated-rollout choices; GPU teachers use spawned workers); `train` holds out whole games; `selfplay` runs batched Gumbel MCTS. net-0 (96×8, 6,000 expert games): greedy 78.2% vs solver, 39.3% vs expert; its value head memorizes games (held-out MSE 0.82). MCTS-128 on the pilot net regressed (73.5% vs its greedy 84%). `msflags/rollout.py` with full-game playouts (6 candidates × 32) scored 34.2% vs expert: full-game outcomes are too noisy (SE ≈ 0.17) to rank moves; `turns=2` truncates playouts and scores them in mines.
+
+### Expert iteration and current status
+
+`msflags/deeploop.py` repeats: rollout(net, 2 turns × 128 layouts) labels `--games` games → fine-tune on the newest `--window` iterations → greedy gate on `--gate-layouts` paired layouts; it promotes only gate winners and resumes from `{dir}/loop.jsonl`. Keep CUDA processes ≤ 5: each holds ~1.4 GB, and `earlyoom` terminates Python under 10% free RAM.
+
+| Step | Result |
+|---|---|
+| net-1: net-0 fine-tuned on 1,250 expert2 games | greedy 63.0% vs expert (300); = net-1p (49.8%, 600) |
+| net-2: + 900 games of rollout(net-1) | 56.5% vs net-1 (800, CI 52.9–60.0) |
+| loop iterations 1–4 (rollout(net-2/net-002/net-003)) | gates 48.2 / 53.0 / 50.3 / 50.8%; net-003 vs net-2 54.7% (1,000, CI 51.5–57.9) |
+| rollout(net-2) vs net-2 greedy | 48.7% (300); 256 layouts × 10 candidates 53.0% (300) — search has stopped improving the policy |
+| **net-003 (catalog `p96x8-n3.greedy`) vs solver** | **88.45% (2,000 games, CI 87.1–89.8) → +352 direct** |
+
+Ledger (solver = 1000) after round 3: p96x8-n3 **1395 ± 53**, p96x8-n2 1386 ± 51, p96x8-n1 1352 ± 36, expert2 1330 ± 45, r64x4 g201 greedy 1319, expert ~1300. A 3000 rating needs ≈ 99.999% against the solver; win rates against it saturate near 85–90% for every strong agent tested (journal chapter 15).
 
 ### Distilled reply-value expert
 
