@@ -42,4 +42,19 @@
 <p>The win rate against the solver is the quantity the target is anchored to, and it is saturating around 85–90%. Bradley–Terry turns any win rate <math><mi>w</mi></math> against the anchor into a gap:</p>
 <math display="block"><mrow><mi>Δ</mi><mo>=</mo><mn>400</mn><mspace width="0.2em"/><msub><mi>log</mi><mn>10</mn></msub><mfrac><mi>w</mi><mrow><mn>1</mn><mo>−</mo><mi>w</mi></mrow></mfrac></mrow></math>
 <p>Ninety percent is +382, 99% is +798, and 99.999% is +2000. Every extra 400 points demands roughly a tenfold drop in losses. Our losses come largely from guessing luck that the winner of a fair game cannot remove. Chapter 11 measured about three mines of bad luck in a typical loss. We found no evidence that any agent playing only from public information can lose fewer than a few games in a hundred to the greedy solver.</p>
+<h2>How much of a loss is dice?</h2>
+<p>To check that claim we audited 600 games between net-3 and the solver. For every guess we recorded the mine probability and whether it hit; for every bomb, the expected and actual mines. A player's <em>luck</em> is the sum of actual minus expected, in mines:</p>
+<math display="block"><mrow><mi>L</mi><mo>=</mo><munder><mo>∑</mo><mtext>guesses</mtext></munder><mo>(</mo><msub><mn>1</mn><mtext>hit</mtext></msub><mo>−</mo><msub><mi>p</mi><mtext>cell</mtext></msub><mo>)</mo><mo>+</mo><munder><mo>∑</mo><mtext>bombs</mtext></munder><mo>(</mo><mtext>mines</mtext><mo>−</mo><mi>𝔼</mi><mo>[</mo><mtext>mines</mtext><mo>]</mo><mo>)</mo></mrow></math>
+<table class="journal-table">
+<thead><tr><th>net-3 vs solver, 600 games</th><th>Value</th></tr></thead>
+<tbody>
+<tr><th>Win rate</th><td>86.2% (83 losses)</td></tr>
+<tr><th>Luck difference in wins (net-3 − solver)</th><td>+0.63 mines</td></tr>
+<tr><th>Luck difference in losses</th><td>−4.89 mines</td></tr>
+<tr><th>Final margin in losses</th><td>−5.92 mines</td></tr>
+<tr><th>Losses whose luck deficit exceeds the margin</th><td>41 of 83</td></tr>
+<tr><th>Standard deviation of the luck difference</th><td>3.76 mines per game</td></tr>
+</tbody>
+</table>
+<p>Half of the losses would have been wins if both sides had hit exactly their expected number of mines. Those 41 games, 6.8% of the total, were decided by dice that no public-information strategy controls. This is an approximation: a different player would have faced different guesses. But it puts the ceiling of a fair player against this solver somewhere around 93%, about +450 Elo or a rating near 1450. The luck difference also spreads by 3.8 mines from game to game.</p>
 <p>So the honest scoreboard is this. The strongest agent, net-3, plays a fair game in about a millisecond per move. It is rated about 1395, roughly +395 over the solver, +60–75 over the best earlier self-play networks and about +90 over the hand-written expert. The expert-iteration loop keeps running in the background, and further gains will be reported. But the distance from 1400 to 3000 is not a matter of more compute. Under this scale, with this game's luck, it is the distance between winning nine games in ten and winning ninety-nine thousand nine hundred and ninety-nine in a hundred thousand.</p>
