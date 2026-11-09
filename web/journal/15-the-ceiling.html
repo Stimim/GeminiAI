@@ -1,0 +1,45 @@
+<p class="article-intro">Five turns of the loop later, two curves have flattened. Each new network barely beats the last, and every new champion beats the solver at about the same rate. This chapter measures both plateaus and states plainly what they mean for the 3000-Elo target.</p>
+<h2>The loop runs out of teacher</h2>
+<p>Every iteration gates the new network against its teacher in a greedy match on shared layouts. A win rate above 50% promotes it. The first step was large; the rest hover at a coin flip:</p>
+<figure>
+<svg viewBox="0 0 660 250" role="img" aria-labelledby="gate-title gate-desc">
+<title id="gate-title">Expert-iteration gate results</title>
+<desc id="gate-desc">New network against its teacher, greedy, with 95 percent intervals. Iteration 0: 56.5 percent, 52.9 to 60.0. Iteration 1: 48.2 percent, 44.3 to 52.2, rejected. Iteration 2: 53.0 percent, 48.8 to 57.2. Iteration 3: 50.3 percent, 46.5 to 54.2. Iteration 4: 50.8 percent, 47.6 to 54.1. A 1000-game recheck of iteration 3 against net-2: 54.7 percent, 51.5 to 57.9.</desc>
+<g class="chart-grid"><path d="M190 20V200M310 20V200M430 20V200M550 20V200"/></g>
+<g class="diagram-small"><text x="190" y="220" text-anchor="middle">40%</text><text x="310" y="220" text-anchor="middle">50%</text><text x="430" y="220" text-anchor="middle">60%</text><text x="550" y="220" text-anchor="middle">70%</text></g>
+<path class="diagram-edge diagram-teal" stroke-dasharray="5 5" d="M310 20V200"/>
+<g><text x="8" y="39">Iteration 0 (net-2)</text><text x="8" y="69">Iteration 1, rejected</text><text x="8" y="99">Iteration 2</text><text x="8" y="129">Iteration 3</text><text x="8" y="159">Iteration 4</text><text x="8" y="189">It. 3 vs net-2, 1000 games</text></g>
+<path class="chart-medium" d="M345 35H430M242 65H336M296 95H396M268 125H360M281 155H359M328 185H405"/>
+<g class="chart-dot-medium"><circle cx="388" cy="35" r="6"/><circle cx="288" cy="65" r="6"/><circle cx="346" cy="95" r="6"/><circle cx="314" cy="125" r="6"/><circle cx="320" cy="155" r="6"/><circle cx="366" cy="185" r="6"/></g>
+</svg>
+<figcaption>Win rate of each new network against its teacher. Iterations 0–3 used 300-layout gates (600 games), iteration 4 a 500-layout gate. The last row rematches iteration 3 against net-2 over 1,000 fresh games.</figcaption>
+</figure>
+<p>The individual gates are too noisy to read alone. A 1,000-game rematch showed that iteration 3 really is better than net-2, at 54.7%. Across three iterations that is roughly +33 Elo, against +45 for the single first step. The reason showed up when we asked the teacher directly. Two-turn rollouts on top of net-2 won only 48.7% against net-2's own greedy policy (300 games); a search twice as wide won 53.0%, not significantly more. Once the student has absorbed what a short look-ahead can see, the look-ahead has nothing left to teach.</p>
+<h2>The solver stops being informative</h2>
+<p>Head to head, the ladder is clear. Every result below is a recorded ledger match:</p>
+<table class="journal-table">
+<thead><tr><th>Match</th><th>Wins</th><th>Rate</th></tr></thead>
+<tbody>
+<tr><th>Two-ply expert vs one-ply expert</th><td>60 / 100</td><td>60%</td></tr>
+<tr><th>net-3 vs two-ply expert</th><td>60 / 100</td><td>60%</td></tr>
+<tr><th>net-3 vs one-ply expert</th><td>67 / 100</td><td>67%</td></tr>
+<tr><th>net-1 vs one-ply expert</th><td>187 / 300</td><td>62%</td></tr>
+</tbody>
+</table>
+<p>Against the solver, the same agents are hard to tell apart:</p>
+<table class="journal-table">
+<thead><tr><th>Agent vs solver</th><th>Wins</th><th>Rate</th><th>Implied Elo gap</th></tr></thead>
+<tbody>
+<tr><th>One-ply expert</th><td>677 / 800</td><td>84.6%</td><td>+296</td></tr>
+<tr><th>Two-ply expert</th><td>81 / 100</td><td>81.0%</td><td>+252</td></tr>
+<tr><th>net-1</th><td>260 / 300</td><td>86.7%</td><td>+325</td></tr>
+<tr><th>net-2</th><td>90 / 100</td><td>90.0%</td><td>+382</td></tr>
+<tr><th>net-3</th><td>89 / 100</td><td>89.0%</td><td>+363</td></tr>
+</tbody>
+</table>
+<p>From the one-ply expert to net-3, the head-to-head ladder climbs about 120–140 Elo. The solver records move by about 70, and their 100-game samples are noisy enough to reverse the order of neighbours. The regularized Bradley–Terry fit combines both kinds of evidence and places net-3 first at <strong>1395 ± 53</strong>, ahead of net-2 (1386), net-1 (1352) and the two-ply expert (1330).</p>
+<h2>What 3000 would need</h2>
+<p>The win rate against the solver is the quantity the target is anchored to, and it is saturating around 85–90%. Bradley–Terry turns any win rate <math><mi>w</mi></math> against the anchor into a gap:</p>
+<math display="block"><mrow><mi>Δ</mi><mo>=</mo><mn>400</mn><mspace width="0.2em"/><msub><mi>log</mi><mn>10</mn></msub><mfrac><mi>w</mi><mrow><mn>1</mn><mo>−</mo><mi>w</mi></mrow></mfrac></mrow></math>
+<p>Ninety percent is +382, 99% is +798, and 99.999% is +2000. Every extra 400 points demands roughly a tenfold drop in losses. Our losses come largely from guessing luck that the winner of a fair game cannot remove. Chapter 11 measured about three mines of bad luck in a typical loss. We found no evidence that any agent playing only from public information can lose fewer than a few games in a hundred to the greedy solver.</p>
+<p>So the honest scoreboard is this. The strongest agent, net-3, plays a fair game in about a millisecond per move. It is rated about 1395, roughly +395 over the solver, +60–75 over the best earlier self-play networks and about +90 over the hand-written expert. The expert-iteration loop keeps running in the background, and further gains will be reported. But the distance from 1400 to 3000 is not a matter of more compute. Under this scale, with this game's luck, it is the distance between winning nine games in ten and winning ninety-nine thousand nine hundred and ninety-nine in a hundred thousand.</p>
