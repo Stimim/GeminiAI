@@ -1,0 +1,51 @@
+<p class="article-intro">The next instruction was not to explain the plateau. It was to try again: build a new AI, keep the greedy exact solver at 1000 Elo, and demonstrate a 95% rating lower bound of at least 3000. We had seven days. The experiment ended with working new policies and a much larger match record, but not the requested result.</p>
+
+<h2>Keep the ruler still</h2>
+<p>Chapter 15 argued that we were near a ceiling. This run did not take that conclusion as a premise. It also did not make the target easier. New files, new weights and forks were allowed; existing AIs, their weights, the game rules and the rating calculation were not to change. A chain of opponents was acceptable, provided the project's existing method supported the final rating.</p>
+<p>That last condition matters. A stronger player need not separate cleanly from every opponent, and a high win rate in one match is not a rating certificate. We kept the original regularized Bradley–Terry fit, the Solver anchor, its prior and its uncertainty calculation. The thing to improve was the player, not the scoreboard.</p>
+
+<h2>More ways to learn the same game</h2>
+<p>The search moved beyond copying the old teacher. New PPO policies learned from completed games and terminal wins. We tried changing only the policy heads, updating the whole network, training against stronger frozen opponents and mixtures of opponents, and changing exploration temperature. Other branches added a penalty for drifting away from an initial policy or averaged preserved policy parameters.</p>
+<p>One line of experiments gave the training critic information the deployed actor could not see. Another played a separate reference game on the same mine layout, then used the difference in outcomes as a training baseline. The reference player followed its own public observations; it did not follow the learner's sampled moves. These were attempts to make the learning signal less noisy, not permission for the playing AI to inspect hidden mines.</p>
+<p>More machinery did not reliably make a better opponent. Some full-network and higher-temperature variants regressed. The strongest supported result remained a preserved policy called <code>warm100</code>, loaded by the ordinary <code>deep</code> agent with search disabled. A later generation number was not grounds for promotion.</p>
+
+<h2>Freeze first, then play</h2>
+<p>Before the final held-out matches, we selected the new policy with the highest lower confidence bound in the accumulated original-method fit. We saved its exact specification and checkpoint hash. The same bytes then played two fresh panels: one against the unchanged Solver, one against unchanged original n3. Each layout was played from both seats. There was no choosing a different checkpoint after seeing either result.</p>
+<table class="journal-table">
+<thead><tr><th>Opponent</th><th>Wins / games</th><th>Win rate</th><th>95% interval</th></tr></thead>
+<tbody>
+<tr><th>Original Solver</th><td>4530 / 5000</td><td>90.60%</td><td>89.78–91.40%</td></tr>
+<tr><th>Original n3</th><td>2790 / 5000</td><td>55.80%</td><td>54.38–57.22%</td></tr>
+<tr><th>Preserved private100</th><td>4953 / 10000</td><td>49.53%</td><td>48.61–50.43%</td></tr>
+</tbody>
+</table>
+<p>The first two rows are the predeclared held-out panels. The third is an additional, separately predeclared comparison against a trained descendant, run with the remaining time. These are the original paired-layout win-rate intervals, not rating intervals. The last row includes a coin flip: it does not establish a parent–descendant improvement.</p>
+
+<h2>A failed process is not a win</h2>
+<p>One earlier direct-baseline panel crashed inside the unchanged Solver with <code>ValueError: no consistent mine count</code>. Its file contained 190 partial game records and metadata marked <code>complete:false</code>. We preserved the file and excluded the entire incomplete panel. We did not award a win for the crash, repair the baseline, replace the seed or manually mark the file complete.</p>
+<p>Reboots and interrupted training did not restart the seven-day clock. Checkpoints and evidence retained their identities across resumptions. A longer control run that never reached its requested generation stayed unfinished; an earlier checkpoint was not renamed to fill the gap. Completed formal panels kept their losses, including the disappointing ones.</p>
+
+<h2>The number the experiment supports</h2>
+<p>The final fit used 235 completed formal record files. The total below is the whole opponent network, not the number of games played by a single candidate. The best-supported policy was chosen by the required lower bound, not merely by the highest point estimate.</p>
+<table class="journal-table">
+<thead><tr><th>Final original-method measure</th><th>Result</th></tr></thead>
+<tbody>
+<tr><th>Valid formal games, all opponents</th><td>242,200</td></tr>
+<tr><th>warm100 appearances</th><td>38,000</td></tr>
+<tr><th>warm100 fitted Elo</th><td>1400.13 ± 5.83</td></tr>
+<tr><th>warm100 95% lower bound</th><td>1394.30</td></tr>
+<tr><th>Required lower bound</th><td>3000</td></tr>
+</tbody>
+</table>
+<p>The displayed uncertainty is the project's existing 95% half-width. The original threshold command exited with status 1: the requirement failed. Every owned training and benchmark process had exited before the November 16 cutoff.</p>
+
+<h2>Leave a trail, not a victory lap</h2>
+<p>The new policy still runs through the existing match command. From the project root, with the retained checkpoint present and a fresh output path:</p>
+<pre><code>OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 \
+.venv/bin/python -m msflags.bench \
+  'deep:net=checkpoints/dev-goal-3000/ppo-solver-warm-s2010235253/policy-000100.pt,sims=0,device=cpu' \
+  solver --layouts 2500 --workers 1 --seed 2010235427 \
+  --records /tmp/msflags-warm100-solver-recheck.jsonl</code></pre>
+<p>Do not overwrite the archived match files. A seed reproduces the layouts, not bit-identical neural trajectories: the original evaluator's unseeded feature RNG was left unchanged.</p>
+<p>The local artifact <code>checkpoints/dev-goal-3000/final-verification-result.json</code> ties together the held-out results, hashes and final rating report. The adjacent evidence manifest at <code>checkpoints/dev-goal-3000/frozen-research/frozen-network-final-s2010235429.inputs.json</code> retains the original reproduction argv and every included record and metadata hash. These are workspace artifacts; publishing this chapter does not bundle the checkpoints or game logs.</p>
+<p>This is a negative experimental result, not a proof that no public-information AI can ever meet the target. In particular, an argument about losses against one opponent is not a universal ceiling on a joint opponent-chain fit. What we can say is narrower and measured: this seven-day attempt did not produce the required AI. We kept the ruler still, kept the losses, and stopped without calling the result 3000 Elo.</p>
